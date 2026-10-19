@@ -2,7 +2,7 @@
 
 Мұғалім мен оқушыларға арналған сайт: 8 бөлім, проблемалық жағдаяттар, тапсырмалар, теория, ЖИ-мен зерттеу.
 
-- Сайт: статикалық HTML/CSS/JS (GitHub Pages)
+- Сайт: статикалық HTML/CSS/JS, Cloudflare (`sh deploy.sh`) — https://fizika9.i-b-aseke.workers.dev
 - Мазмұн: Supabase (Postgres + Auth + Storage)
 - Мұғалім кабинеті: `admin.html`
 

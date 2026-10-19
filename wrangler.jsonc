@@ -1,0 +1,9 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "fizika9",
+  "compatibility_date": "2026-10-19",
+  // Тек dist/ жарияланады — оны deploy.sh жинайды
+  "assets": {
+    "directory": "./dist"
+  }
+}
