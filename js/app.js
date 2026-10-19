@@ -125,9 +125,10 @@ function bindTasks(root, tasks) {
         ok = +sel.value === task.answer;
         sel.closest('.opt').classList.add(ok ? 'right' : 'wrong');
       } else {
-        const raw = el.querySelector('.num-row input').value.replace(/\s/g, '').replace(',', '.');
-        if (raw === '' || isNaN(+raw)) { fb.className = 'feedback no'; fb.textContent = 'Санды енгізіңіз (мысалы: 2,5).'; return; }
-        ok = Math.abs(+raw - task.answer) <= task.tol;
+        // «2,5», «2.5», «2,5 м» — бәрі қабылданады
+        const num = parseFloat(el.querySelector('.num-row input').value.replace(/\s/g, '').replace(',', '.'));
+        if (!Number.isFinite(num)) { fb.className = 'feedback no'; fb.textContent = 'Санды енгізіңіз (мысалы: 2,5).'; return; }
+        ok = Math.abs(num - task.answer) <= task.tol + 1e-9; // шекаралық мән (2,6 ± 0,1) дұрыс саналуы үшін
       }
       fb.className = 'feedback ' + (ok ? 'ok' : 'no');
       fb.textContent = ok ? 'Дұрыс! Жарайсың 👏' : 'Қате. Тағы бір рет ойланып көр немесе шешуін қара.';

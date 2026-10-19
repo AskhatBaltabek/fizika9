@@ -1,4 +1,5 @@
 /* Мұғалім кабинеті */
+[hidden] { display: none !important; }
 .admin .header .brand span { font-size: 18px; }
 .who { font-size: 13px; opacity: .8; }
 .muted { color: var(--muted); }
@@ -78,11 +79,15 @@
   .admin .header-in { gap: 8px; }
   .admin .nav { position: static; flex-direction: row; padding: 0; background: none; overflow-x: auto; }
   .admin .nav a { padding: 8px; font-size: 11px; }
-  .admin .brand, .who { display: none; }
+  .who { display: none; }
+  .admin .brand span { font-size: 15px; }
   .ad-layout { grid-template-columns: 1fr; }
   .ad-side ol { display: flex; overflow-x: auto; }
   .ad-side li { flex: none; }
-  .ad-main { padding: 16px 16px 120px; }
+  .ad-main { padding: 16px 16px 150px; }
   .g2, .g3, .f-row { grid-template-columns: 1fr; }
-  .savebar { left: 0; padding: 10px 16px; }
+  .savebar { left: 0; padding: 8px 12px; gap: 8px; flex-wrap: wrap; }
+  .savebar .state { flex-basis: 100%; font-size: 12px; }
+  .savebar .btn { flex: 1; padding: 10px 8px; font-size: 13px; }
+  .admin .nav, .ad-side ol { scrollbar-width: none; }
 }

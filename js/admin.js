@@ -141,9 +141,8 @@ $('#topic-list').onclick = async e => {
   if (j < 0 || j >= topics.length) return;
   [topics[i], topics[j]] = [topics[j], topics[i]];
   renderList();
-  const res = await Promise.all(topics.map((t, k) => sb.from('topics').update({ position: k }).eq('id', t.id)));
-  const err = res.find(r => r.error);
-  toast(err ? 'Қате: ' + err.error.message : 'Реті сақталды', !!err);
+  const { error } = await sb.from('topics').upsert(topics.map(topicRow));
+  toast(error ? 'Қате: ' + error.message : 'Реті сақталды', !!error);
 };
 
 $('#add-topic').onclick = async () => {
@@ -377,6 +376,15 @@ $('#editor').addEventListener('click', async e => {
 });
 
 // ---------- Сақтау ----------
+// Жазу тек POST (upsert) арқылы: кейбір антивирустар мен кеңейтімдер браузерде PATCH сұраныстарын бұғаттайды
+function topicRow(t) {
+  return {
+    id: t.id, position: topics.indexOf(t), title: t.title, short: t.short, icon: t.icon, color: t.color,
+    problem_title: t.problem.title, problem_text: t.problem.text, problem_questions: t.problem.questions, problem_image: t.problem.image,
+    formulas: t.formulas, ai: t.ai, teacher: t.teacher, updated_at: new Date().toISOString(),
+  };
+}
+
 function validate(t) {
   for (const [i, x] of t.tasks.entries()) {
     const n = `${i + 1}-тапсырма`;
@@ -401,11 +409,7 @@ async function save() {
     t.sections.forEach(s => s.id ||= crypto.randomUUID());
     t.tasks.forEach(x => x.id ||= newId());
     const must = r => { if (r.error) throw r.error; return r; };
-    must(await sb.from('topics').update({
-      title: t.title, short: t.short, icon: t.icon, color: t.color,
-      problem_title: t.problem.title, problem_text: t.problem.text, problem_questions: t.problem.questions, problem_image: t.problem.image,
-      formulas: t.formulas, ai: t.ai, teacher: t.teacher, updated_at: new Date().toISOString(),
-    }).eq('id', t.id));
+    must(await sb.from('topics').upsert(topicRow(t)));
 
     const inList = ids => `(${ids.map(id => `"${id}"`).join(',')})`;
     let del = sb.from('sections').delete().eq('topic_id', t.id);
@@ -436,6 +440,9 @@ async function deleteTopic() {
   if (!confirm(`«${current.title}» тақырыбын барлық тапсырмаларымен бірге жоясыз ба? Бұл әрекетті қайтару мүмкін емес.`)) return;
   const { error } = await sb.from('topics').delete().eq('id', current.id);
   if (error) return toast('Қате: ' + error.message, true);
+  // Тақырыптың суреттерін де өшіреміз
+  const { data: files } = await sb.storage.from('images').list(current.id, { limit: 1000 });
+  if (files?.length) await sb.storage.from('images').remove(files.map(f => `${current.id}/${f.name}`));
   setDirty(false);
   current = null;
   toast('Тақырып жойылды');

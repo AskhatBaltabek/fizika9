@@ -84,9 +84,13 @@ insert into storage.buckets (id, name, public) values ('images', 'images', true)
 drop policy if exists "teachers upload images" on storage.objects;
 drop policy if exists "teachers change images" on storage.objects;
 drop policy if exists "teachers delete images" on storage.objects;
+drop policy if exists "teachers list images" on storage.objects;
 create policy "teachers upload images" on storage.objects for insert to authenticated
   with check (bucket_id = 'images' and public.is_teacher());
 create policy "teachers change images" on storage.objects for update to authenticated
   using (bucket_id = 'images' and public.is_teacher());
 create policy "teachers delete images" on storage.objects for delete to authenticated
+  using (bucket_id = 'images' and public.is_teacher());
+-- Жою үшін Storage алдымен файлды «көре» алуы керек
+create policy "teachers list images" on storage.objects for select to authenticated
   using (bucket_id = 'images' and public.is_teacher());

@@ -40,8 +40,8 @@ button { font: inherit; cursor: pointer; }
 .nav a.active { color: #5fe0d5; opacity: 1; }
 .header-tools { display: flex; align-items: center; gap: 12px; }
 .search { position: relative; }
-.search input { width: 0; opacity: 0; border: 0; border-radius: 20px; padding: 8px 14px; transition: .25s; font: inherit; font-size: 14px; }
-.search.open input { width: 200px; opacity: 1; }
+.search input { display: none; width: 200px; border: 0; border-radius: 20px; padding: 8px 14px; font: inherit; font-size: 14px; }
+.search.open input { display: block; }
 .icon-btn { background: none; border: 0; color: #fff; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; }
 .icon-btn:hover { background: rgba(255,255,255,.1); }
 .role { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,.1); border: 0; color: #fff; padding: 4px 12px 4px 4px; border-radius: 30px; font-size: 13px; font-weight: 600; }
@@ -159,12 +159,14 @@ body.teacher .teacher-only { display: block; }
 .page-head h1 { margin: 0 0 6px; color: var(--navy); text-transform: uppercase; font-size: clamp(24px, 3vw, 34px); }
 .page-head p { margin: 0; color: var(--muted); }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 24px 0; }
-.chip { border: 1.5px solid var(--line); background: #fff; border-radius: 30px; padding: 7px 14px; font-size: 14px; font-weight: 600; }
+.chip { border: 1.5px solid var(--line); background: #fff; color: var(--text); border-radius: 30px; padding: 7px 14px; font-size: 14px; font-weight: 600; }
 .chip.active { background: var(--navy); color: #fff; border-color: var(--navy); }
 .task-topic { font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
 .empty { color: var(--muted); padding: 40px 0; text-align: center; }
 
 .doc { padding: 32px 20px 64px; display: grid; gap: 20px; max-width: 900px; }
+.doc > * { min-width: 0; overflow-wrap: anywhere; }
+.doc table { display: block; overflow-x: auto; }
 .doc .box h2 { margin: 0 0 10px; color: var(--navy); font-size: 20px; }
 .doc .box p, .doc .box li { font-size: 16px; }
 .steps { display: grid; gap: 12px; counter-reset: s; padding: 0; list-style: none; }
@@ -219,7 +221,7 @@ th { color: var(--navy); }
 .theory summary::after { content: '+'; font-size: 20px; color: var(--teal); }
 .theory details[open] summary::after { content: '−'; }
 .md { padding: 0 20px 16px; }
-.md img { max-width: 100%; border-radius: 10px; }
+.md img { display: block; max-width: 100%; max-height: 420px; margin: 12px auto; border-radius: 10px; }
 .md h1, .md h2, .md h3 { color: var(--navy); font-size: 18px; }
 .md table { margin: 10px 0; }
 .problem .pic { overflow: hidden; }
