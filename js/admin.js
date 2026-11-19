@@ -173,41 +173,70 @@ function itemHead(label, i, kind) {
 }
 
 const fmtNum = n => Number.isFinite(n) ? String(n).replace('.', ',') : '';
+const KINDS = { choice: 'Нұсқаны таңдау', match: 'Сәйкестендіру', tf: 'Дұрыс / бұрыс', calc: 'Есеп (сан жауап)', open: 'Логикалық дәлелдеу (ЖИ бағалайды)' };
+const PART_LABELS_ED = ['а', 'ә', 'б', 'в', 'г', 'ғ'];
+const letters = idx => Array.isArray(idx) ? idx.map(k => LETTERS[k] ?? '?').join(', ') : '';
 
-function questionEditor(q, i, k) {
-  const isText = q.kind === 'text';
-  return `<div class="q-item" data-q="${k}">
-    <div class="item-head"><span class="n">${k + 1}-сұрақ</span><span class="sp"></span>
-      <button type="button" class="ico del" data-act="q-del" data-i="${i}" data-k="${k}">✕</button></div>
-    <label>Сұрақ мәтіні<input name="qtext" value="${esc(q.text)}" placeholder="Мысалы: Велосипедшінің орташа жылдамдығын есепте."></label>
-    <div class="g4">
-      <label>Жауап түрі<select name="kind">
-        <option value="number" ${!isText ? 'selected' : ''}>Сан</option>
-        <option value="text" ${isText ? 'selected' : ''}>Сөз / бірлік</option>
-      </select></label>
-      ${isText ? `
-      <label class="span2">Қабылданатын жауаптар <span class="hint">(үтір арқылы)</span><input name="accept" value="${esc((q.accept || []).join(', '))}" placeholder="м/с, метр/секунд"></label>` : `
-      <label>Дұрыс жауап<input name="answer" inputmode="decimal" value="${esc(fmtNum(q.answer))}" placeholder="5"></label>
-      <label>Бірлігі<input name="unit" value="${esc(q.unit || '')}" placeholder="м/с"></label>`}
-      <label>Балл<input name="points" inputmode="numeric" value="${esc(String(q.points ?? 1))}"></label>
-    </div>
-    ${isText ? '' : `<label>Рұқсат етілген ауытқу <span class="hint">(мысалы 0,1 — жауап 4,9…5,1 аралығында болса дұрыс)</span><input name="tol" inputmode="decimal" value="${esc(fmtNum(q.tol ?? 0))}"></label>`}
+function answerRow(a, i, k, m) {
+  const isWord = !!a.accept;
+  return `<div class="ans-row" data-ans="${m}">
+    <select name="atype"><option value="num" ${!isWord ? 'selected' : ''}>Сан</option><option value="word" ${isWord ? 'selected' : ''}>Сөз</option></select>
+    ${isWord
+      ? `<input name="accept" class="wide" value="${esc((a.accept || []).join(', '))}" placeholder="азаяды, кемиді (үтір арқылы)">`
+      : `<input name="value" inputmode="decimal" value="${esc(fmtNum(a.value))}" placeholder="жауап">
+         <input name="unit" value="${esc(a.unit || '')}" placeholder="бірлік">
+         <input name="tol" inputmode="decimal" value="${esc(fmtNum(a.tol ?? 0))}" placeholder="± ауытқу" title="Рұқсат етілген ауытқу">
+         <label class="chk" title="Шартта осындай сан болса: оқушы санды бірлігімен жазуы керек"><input type="checkbox" name="needUnit" ${a.needUnit ? 'checked' : ''}> бірлігімен</label>`}
+    <input name="apoints" inputmode="numeric" value="${esc(String(a.points ?? 1))}" title="Балл" class="pts-in">
+    <button type="button" class="ico del" data-act="ans-del" data-i="${i}" data-k="${k}" data-m="${m}">✕</button>
+  </div>`;
+}
+
+function partEditor(p, i, k) {
+  const body = {
+    choice: `<label>Нұсқалар <span class="hint">(әрқайсысы жаңа жолдан, әріпсіз)</span><textarea name="options">${esc((p.options || []).join('\n'))}</textarea></label>
+      <label class="short">Дұрыс жауап<select name="answer">${LETTERS.slice(0, 6).map((l, n) => `<option value="${n}" ${n === p.answer ? 'selected' : ''}>${l}</option>`).join('')}</select></label>`,
+    match: `<div class="g2">
+        <label>Сол жақ (1, 2, 3…) <span class="hint">(жаңа жолдан)</span><textarea name="left">${esc((p.left || []).join('\n'))}</textarea></label>
+        <label>Оң жақ (А, Ә, Б…) <span class="hint">(жаңа жолдан)</span><textarea name="right">${esc((p.right || []).join('\n'))}</textarea></label></div>
+      <label class="short">Дұрыс сәйкестік <span class="hint">(сол жақтың ретімен әріптер, мысалы: Б, А, Ә)</span><input name="answer" value="${esc(letters(p.answer))}"></label>`,
+    tf: `<label>Тұжырымдар <span class="hint">(әрқайсысы жаңа жолдан)</span><textarea name="statements">${esc((p.statements || []).join('\n'))}</textarea></label>
+      <label class="short">Жауаптар <span class="hint">(Д — дұрыс, Б — бұрыс; мысалы: Д, Б, Б)</span><input name="answer" value="${esc((Array.isArray(p.answer) ? p.answer : []).map(v => v ? 'Д' : 'Б').join(', '))}"></label>`,
+    calc: `<div class="hint">Сайт осы сандарды оқушының «Берілгені / Шешуі / Жауабы» мәтінінен іздейді. Бөлім балы — жолдардың балдарының қосындысы.</div>
+      ${(p.answers || []).map((a, m) => answerRow(a, i, k, m)).join('')}
+      <button type="button" class="add" data-act="ans-add" data-i="${i}" data-k="${k}">+ Жауап</button>`,
+    open: `<label>Критерийлер <span class="hint">(ЖИ осы бойынша балл қояды; әрқайсысы жаңа жолдан, балын жақшада көрсетіңіз)</span>
+      <textarea name="criteria" class="tall-s">${esc((p.criteria || []).join('\n'))}</textarea></label>`,
+  }[p.kind] || '';
+  return `<div class="q-item" data-part="${k}">
+    <div class="item-head"><span class="n">${esc(p.label || PART_LABELS_ED[k])}) бөлім</span>
+      <select name="kind">${Object.entries(KINDS).map(([v, l]) => `<option value="${v}" ${v === p.kind ? 'selected' : ''}>${l}</option>`).join('')}</select>
+      ${p.kind === 'calc' ? `<span class="hint">балл: ${(p.answers || []).reduce((a, x) => a + (Number(x.points) || 0), 0)}</span>` : `<label class="pts-label">Балл<input name="points" inputmode="numeric" value="${esc(String(p.points ?? 1))}" class="pts-in"></label>`}
+      <span class="sp"></span>
+      <button type="button" class="ico" data-act="part-up" data-i="${i}" data-k="${k}">↑</button>
+      <button type="button" class="ico del" data-act="part-del" data-i="${i}" data-k="${k}">✕</button></div>
+    <label>Тапсырма мәтіні<textarea name="ptext">${esc(p.text || '')}</textarea></label>
+    ${p.table ? '<div class="hint">Бұл бөлімде кесте бар (сақталады).</div>' : ''}
+    ${body}
   </div>`;
 }
 
 function taskEditor(x, i) {
-  const max = x.questions.reduce((a, q) => a + (Number(q.points) || 0), 0);
+  const max = x.parts.reduce((a, p) => a + (Number(p.points) || 0), 0);
   return `<div class="item" data-task="${i}">
-    ${itemHead('Есеп', i, 'tasks')}
+    ${itemHead('Тапсырма', i, 'tasks')}
     <div class="g2">
-      <label>Атауы<input name="title" value="${esc(x.title)}" placeholder="Мысалы: Велосипедшінің қозғалысы"></label>
-      <label>Белгі <span class="hint">(мысалы: Механика)</span><input name="tag" value="${esc(x.tag || '')}"></label>
+      <label>Атауы<input name="title" value="${esc(x.title)}" placeholder="Мысалы: Карьерлік самосвалдың қозғалысы"></label>
+      <label>Белгі <span class="hint">(мысалы: Кинематика)</span><input name="tag" value="${esc(x.tag || '')}"></label>
     </div>
-    <label>Жағдаят (шарты)<textarea name="text">${esc(x.text)}</textarea></label>
+    <label>Жағдаят<textarea name="text">${esc(x.text)}</textarea></label>
     ${imgField('image', x.image)}
-    <div class="hint">Сұрақтар — барлығы ${max} балл. Сан жауаптарды сайт оқушының шешімінен өзі іздейді.</div>
-    ${x.questions.map((q, k) => questionEditor(q, i, k)).join('')}
-    <button type="button" class="add" data-act="q-add" data-i="${i}">+ Сұрақ</button>
+    <div class="hint">Бөліктер — барлығы ${max} балл.</div>
+    ${x.parts.map((p, k) => partEditor(p, i, k)).join('')}
+    <div class="part-add"><select name="newkind">${Object.entries(KINDS).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select>
+      <button type="button" class="add" data-act="part-add" data-i="${i}">+ Бөлік қосу</button></div>
+    <label>Бағалау критерийлері <span class="hint">(мұғалімге көрінеді; әр жол: Критерий | Дескриптор | Балл)</span>
+      <textarea name="rubric" class="tall-s">${esc((x.rubric || []).map(r => r.join(' | ')).join('\n'))}</textarea></label>
     <label>Эталон шешімі <span class="hint">(оқушы тексергеннен кейін көреді; ЖИ осыған сүйенеді)</span><textarea name="solution">${esc(x.solution)}</textarea></label>
     <label>«Көмек алу» кеңестері <span class="hint">(әрқайсысы жаңа жолдан; біткен соң ЖИ көмектеседі)</span><textarea name="hints">${esc((x.hints || []).join('\n'))}</textarea></label>
   </div>`;
@@ -222,6 +251,7 @@ function renderEditor() {
       <h2>Негізгі</h2>
       <label>Атауы<input name="title" value="${esc(t.title)}"></label>
       <label>Қысқаша сипаттама<input name="short" value="${esc(t.short)}"></label>
+      <label>Сабақ мақсаты<textarea name="goal">${esc(t.goal || '')}</textarea></label>
       <div class="g2">
         <div><div class="hint" style="margin-bottom:6px">Белгіше</div>
           <div class="icons">${Object.keys(ICONS).map(k => `<button type="button" data-icon="${k}" class="${k === t.icon ? 'on' : ''}">${ICONS[k]}</button>`).join('')}</div>
@@ -251,9 +281,9 @@ function renderEditor() {
     </div>
 
     <div class="box">
-      <h2>Жағдаяттық есептер</h2>
+      <h2>Тапсырмалар</h2>
       ${t.tasks.map(taskEditor).join('')}
-      <button type="button" class="add" data-act="add-task">+ Есеп қосу</button>
+      <button type="button" class="add" data-act="add-task">+ Тапсырма қосу</button>
     </div>
 
     <div class="box">
@@ -297,7 +327,9 @@ function collect() {
   t.teacher = val('teacher');
   t.formulas = $$('[data-formula]', ed).map(r => [$('[name=f]', r).value.trim(), $('[name=d]', r).value.trim()]).filter(([f, d]) => f || d);
   t.sections = $$('[data-section]', ed).map((r, i) => ({ ...t.sections[i], title: $('[name=title]', r).value.trim(), theory: $('[name=theory]', r).value }));
+  t.goal = val('goal');
   const num = v => parseFloat(String(v).replace(/\s/g, '').replace(',', '.'));
+  const lettersToIdx = v => String(v).split(/[\s,;]+/).filter(Boolean).map(ch => LETTERS.indexOf(ch.toUpperCase()));
   t.tasks = $$('[data-task]', ed).map((r, i) => ({
     ...t.tasks[i],
     title: $('[name=title]', r).value.trim(),
@@ -306,12 +338,35 @@ function collect() {
     image: $('[name=image]', r).value || null,
     solution: $('[name=solution]', r).value.trim(),
     hints: lines($('[name=hints]', r).value),
-    questions: $$('[data-q]', r).map(qr => {
-      const kind = $('[name=kind]', qr).value;
-      const q = { kind, text: $('[name=qtext]', qr).value.trim(), points: num($('[name=points]', qr).value) };
-      if (kind === 'text') q.accept = $('[name=accept]', qr).value.split(',').map(a => a.trim()).filter(Boolean);
-      else Object.assign(q, { answer: num($('[name=answer]', qr).value), unit: $('[name=unit]', qr).value.trim(), tol: num($('[name=tol]', qr).value) || 0 });
-      return q;
+    rubric: lines($('[name=rubric]', r).value).map(l => { const c = l.split('|').map(x => x.trim()); return [c[0] || '', c[1] || '', num(c[2]) || 0]; }),
+    parts: $$('[data-part]', r).map((pr, k) => {
+      const old = t.tasks[i].parts[k] || {};
+      const kind = $('[name=kind]', pr).value;
+      const p = { label: PART_LABELS_ED[k], kind, text: $('[name=ptext]', pr).value.trim(), points: num($('[name=points]', pr)?.value) };
+      if (old.table && old.kind === kind) p.table = old.table;
+      const f = name => $(`[name=${name}]`, pr);
+      if (kind !== old.kind) {
+        // Түрі ауысты: жаңа түрдің бос үлгісі
+        Object.assign(p, { choice: { options: ['', ''], answer: 0 }, match: { left: [''], right: [''], answer: [] }, tf: { statements: [''], answer: [] },
+          calc: { answers: [{ value: NaN, unit: '', tol: 0, points: 1 }] }, open: { criteria: [] } }[kind]);
+      } else if (kind === 'choice') Object.assign(p, { options: lines(f('options').value), answer: +f('answer').value });
+      else if (kind === 'match') Object.assign(p, { left: lines(f('left').value), right: lines(f('right').value), answer: lettersToIdx(f('answer').value) });
+      else if (kind === 'tf') Object.assign(p, { statements: lines(f('statements').value), answer: String(f('answer').value).split(/[\s,;]+/).filter(Boolean).map(x => x.toUpperCase() === 'Д') });
+      else if (kind === 'open') p.criteria = lines(f('criteria').value);
+      else if (kind === 'calc') {
+        p.answers = $$('[data-ans]', pr).map((ar, m) => {
+          const type = $('[name=atype]', ar).value, pts = num($('[name=apoints]', ar).value) || 0;
+          const wasWord = !!(old.answers?.[m]?.accept);
+          if (type === 'word') return { accept: wasWord ? $('[name=accept]', ar).value.split(',').map(x => x.trim()).filter(Boolean) : [], points: pts };
+          if (wasWord) return { value: NaN, unit: '', tol: 0, points: pts };
+          const a = { value: num($('[name=value]', ar).value), unit: $('[name=unit]', ar).value.trim(), tol: num($('[name=tol]', ar).value) || 0, points: pts };
+          const alt = old.answers?.[m]?.alt; if (alt) a.alt = alt;
+          if ($('[name=needUnit]', ar).checked) a.needUnit = true;
+          return a;
+        });
+        p.points = p.answers.reduce((a, x) => a + x.points, 0);
+      }
+      return p;
     }),
   }));
 }
@@ -322,7 +377,7 @@ $('#editor').addEventListener('input', () => setDirty(true));
 
 $('#editor').addEventListener('change', async e => {
   const el = e.target;
-  if (el.name === 'kind') { rerender(); return; }
+  if (el.name === 'kind' || el.name === 'atype') { rerender(); return; }
   if (el.type !== 'file' || !el.files[0]) return;
   const url = await uploadImage(el.files[0]);
   el.value = '';
@@ -362,13 +417,27 @@ $('#editor').addEventListener('click', async e => {
     case 'add-section': t.sections.push({ title: '', theory: '' }); break;
     case 'add-formula': t.formulas.push(['', '']); break;
     case 'add-task':
-      t.tasks.push({ title: '', tag: '', text: '', image: null, solution: '', hints: [],
-        questions: [{ kind: 'number', text: '', answer: NaN, unit: '', tol: 0, points: 2 }] });
+      t.tasks.push({ title: '', tag: '', text: '', image: null, solution: '', hints: [], rubric: [],
+        parts: [{ label: 'а', kind: 'choice', text: '', points: 1, options: ['', '', '', ''], answer: 0 },
+          { label: 'ә', kind: 'calc', text: '', points: 2, answers: [{ value: NaN, unit: '', tol: 0, points: 1 }, { value: NaN, unit: '', tol: 0, points: 1 }] },
+          { label: 'б', kind: 'open', text: '', points: 3, criteria: [] }] });
       break;
-    case 'q-add': t.tasks[i].questions.push({ kind: 'number', text: '', answer: NaN, unit: '', tol: 0, points: 1 }); break;
-    case 'q-del':
-      if (!confirm('Сұрақты жоясыз ба?')) return;
-      t.tasks[i].questions.splice(+b.dataset.k, 1); break;
+    case 'part-add': {
+      const kind = $('[name=newkind]', b.closest('.part-add')).value;
+      t.tasks[i].parts.push({ kind, text: '', points: kind === 'open' ? 3 : 1, ...{ choice: { options: ['', ''], answer: 0 }, match: { left: [''], right: [''], answer: [] },
+        tf: { statements: [''], answer: [] }, calc: { answers: [{ value: NaN, unit: '', tol: 0, points: 1 }] }, open: { criteria: [] } }[kind] });
+      break;
+    }
+    case 'part-del':
+      if (!confirm('Бөлікті жоясыз ба?')) return;
+      t.tasks[i].parts.splice(+b.dataset.k, 1); break;
+    case 'part-up': {
+      const ps = t.tasks[i].parts, k = +b.dataset.k;
+      if (k > 0) [ps[k - 1], ps[k]] = [ps[k], ps[k - 1]];
+      break;
+    }
+    case 'ans-add': t.tasks[i].parts[+b.dataset.k].answers.push({ value: NaN, unit: '', tol: 0, points: 1 }); break;
+    case 'ans-del': t.tasks[i].parts[+b.dataset.k].answers.splice(+b.dataset.m, 1); break;
     case 'img-remove': $('input[type=hidden]', b.closest('[data-img]')).value = ''; collect(); break;
   }
   renderEditor();
@@ -378,16 +447,25 @@ $('#editor').addEventListener('click', async e => {
 // ---------- Сақтау ----------
 function validate(t) {
   for (const [i, x] of t.tasks.entries()) {
-    const n = `${i + 1}-есеп`;
+    const n = `${i + 1}-тапсырма`;
     if (!x.title) return `${n}: атауын жазыңыз.`;
     if (!x.text) return `${n}: жағдаятты жазыңыз.`;
-    if (!x.questions.length) return `${n}: кемінде бір сұрақ қосыңыз.`;
-    for (const [k, q] of x.questions.entries()) {
-      const m = `${n}, ${k + 1}-сұрақ`;
-      if (!q.text) return `${m}: сұрақ мәтінін жазыңыз.`;
-      if (!(q.points > 0)) return `${m}: балл 0-ден көп болуы керек.`;
-      if (q.kind === 'text' && !q.accept.length) return `${m}: кемінде бір қабылданатын жауап жазыңыз.`;
-      if (q.kind === 'number' && !Number.isFinite(q.answer)) return `${m}: дұрыс жауапты сан түрінде жазыңыз (мысалы 2,5).`;
+    if (!x.parts.length) return `${n}: кемінде бір бөлік қосыңыз.`;
+    for (const [k, p] of x.parts.entries()) {
+      const m = `${n}, ${p.label}) бөлім`;
+      if (!p.text) return `${m}: тапсырма мәтінін жазыңыз.`;
+      if (!(p.points > 0)) return `${m}: балл 0-ден көп болуы керек.`;
+      if (p.kind === 'choice' && (p.options.length < 2 || p.answer >= p.options.length)) return `${m}: кемінде 2 нұсқа және бар нұсқаның әрпі керек.`;
+      if (p.kind === 'match') {
+        if (p.left.length < 2 || p.right.length < 2) return `${m}: екі жақта да кемінде 2 жол керек.`;
+        if (p.answer.length !== p.left.length || p.answer.some(a => a < 0 || a >= p.right.length)) return `${m}: сәйкестікті сол жақтың әр жолына бір әріптен жазыңыз (мысалы: Б, А, Ә).`;
+      }
+      if (p.kind === 'tf' && (!p.statements.length || p.answer.length !== p.statements.length)) return `${m}: әр тұжырымға Д немесе Б жазыңыз (мысалы: Д, Б, Б).`;
+      if (p.kind === 'calc') {
+        if (!p.answers.length) return `${m}: кемінде бір жауап қосыңыз.`;
+        if (p.answers.some(a => a.accept ? !a.accept.length : !Number.isFinite(a.value))) return `${m}: әр жауапқа сан (мысалы 2,5) немесе сөз жазыңыз.`;
+      }
+      if (p.kind === 'open' && !p.criteria.length) return `${m}: ЖИ бағалауы үшін кемінде бір критерий жазыңыз.`;
     }
   }
   if (t.sections.some(s => !s.title)) return 'Бөлімдердің атауларын толтырыңыз.';
@@ -398,9 +476,12 @@ function validate(t) {
 function leaks(t) {
   const out = [];
   t.tasks.forEach((x, i) => {
-    const given = extractNumbers(x.text + ' ' + x.questions.map(q => q.text).join(' '));
-    x.questions.forEach((q, k) => {
-      if (q.kind === 'number' && given.some(g => Math.abs(g - q.answer) <= q.tol + 1e-9)) out.push(`${i + 1}-есеп, ${k + 1}-сұрақ`);
+    x.parts.forEach(p => {
+      if (p.kind !== 'calc') return;
+      const given = extractNumbers(x.text + ' ' + p.text);
+      p.answers.forEach(a => {
+        if (!a.accept && !a.needUnit && given.some(g => Math.abs(g - a.value) <= a.tol + 1e-9)) out.push(`${i + 1}-тапсырма, ${p.label}) бөлім (${fmtNum(a.value)})`);
+      });
     });
   });
   return out;
@@ -421,7 +502,7 @@ async function save() {
     setDirty(false);
     renderList();
     const warn = leaks(t);
-    if (warn.length) toast(`Сақталды. Назар аударыңыз: ${warn.join('; ')} — жауабы шартта жазылған санмен бірдей, оқушы оны көшіріп балл алуы мүмкін.`, true);
+    if (warn.length) toast(`Сақталды. Назар аударыңыз: ${warn.join('; ')} — жауап шарттағы санмен бірдей, оқушы оны көшіріп балл алуы мүмкін. «бірлігімен» белгісін қойыңыз.`, true);
     else toast('Сақталды ✓');
   } catch (e) {
     if (!handleAuthError(e)) toast('Сақтау қатесі: ' + e.message, true);

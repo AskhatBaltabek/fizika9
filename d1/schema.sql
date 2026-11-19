@@ -15,6 +15,7 @@ create table if not exists topics (
   formulas text not null default '[]',
   ai text not null default '[]',
   teacher text not null default '',
+  goal text not null default '',
   updated_at text not null default (datetime('now'))
 );
 
@@ -37,7 +38,9 @@ create table if not exists tasks (
   questions text not null default '[]',
   hints text not null default '[]',
   solution text not null default '',
-  image text
+  image text,
+  parts text not null default '[]',
+  rubric text not null default '[]'
 );
 create index if not exists tasks_topic on tasks(topic_id, position);
 

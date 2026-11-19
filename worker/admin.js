@@ -33,11 +33,11 @@ export async function handleAdmin(path, request, env, body, json, me) {
     const p = t.problem || {};
     const stmts = [
       DB.prepare(`update topics set title = ?, short = ?, icon = ?, color = ?, problem_title = ?, problem_text = ?,
-        problem_questions = ?, problem_image = ?, formulas = ?, ai = ?, teacher = ?, updated_at = datetime('now') where id = ?`)
+        problem_questions = ?, problem_image = ?, formulas = ?, ai = ?, teacher = ?, goal = ?, updated_at = datetime('now') where id = ?`)
         .bind(str(t.title, 300) || 'Атаусыз тақырып', str(t.short, 500), str(t.icon, 40), str(t.color, 20),
           str(p.title, 500), str(p.text), JSON.stringify(arr(p.questions).map(q => str(q, 1000))), p.image ? str(p.image, 500) : null,
           JSON.stringify(arr(t.formulas).map(f => [str(f[0], 300), str(f[1], 500)])),
-          JSON.stringify(arr(t.ai).map(a => str(a, 1000))), str(t.teacher), t.id),
+          JSON.stringify(arr(t.ai).map(a => str(a, 1000))), str(t.teacher), str(t.goal, 2000), t.id),
       DB.prepare('delete from sections where topic_id = ?').bind(t.id),
       DB.prepare('delete from tasks where topic_id = ?').bind(t.id),
     ];
@@ -45,9 +45,10 @@ export async function handleAdmin(path, request, env, body, json, me) {
       DB.prepare('insert into sections (id, topic_id, position, title, theory) values (?, ?, ?, ?, ?)')
         .bind(str(s.id, 100) || crypto.randomUUID(), t.id, i, str(s.title, 500), str(s.theory, 100000))));
     arr(t.tasks).forEach((x, i) => stmts.push(
-      DB.prepare('insert into tasks (id, topic_id, position, title, tag, text, questions, hints, solution, image) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      DB.prepare('insert into tasks (id, topic_id, position, title, tag, text, parts, rubric, hints, solution, image) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
         .bind(str(x.id, 100) || newId(), t.id, i, str(x.title, 300), str(x.tag, 100), str(x.text),
-          JSON.stringify(arr(x.questions)), JSON.stringify(arr(x.hints).map(h => str(h, 1000))), str(x.solution), x.image ? str(x.image, 500) : null)));
+          JSON.stringify(arr(x.parts)), JSON.stringify(arr(x.rubric).map(r => [str(r[0], 300), str(r[1], 2000), Number(r[2]) || 0])),
+          JSON.stringify(arr(x.hints).map(h => str(h, 1000))), str(x.solution), x.image ? str(x.image, 500) : null)));
     await DB.batch(stmts);
     return json({ ok: true });
   }

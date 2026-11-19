@@ -91,33 +91,65 @@ function renderHeader(active) {
   document.body.append(foot);
 }
 
-// ---------- Жағдаяттық есеп карточкасы ----------
+// ---------- Контекстік тапсырма карточкасы ----------
 const scores = store.get('f9-scores', {});   // { taskId: ең жақсы балл }
-const maxOf = task => task.questions.reduce((a, q) => a + (Number(q.points) || 0), 0);
+const maxOf = task => task.parts.reduce((a, p) => a + (Number(p.points) || 0), 0);
 const fmt = n => String(n).replace('.', ',');
+const KIND_HINT = { choice: 'Дұрыс жауапты таңда', match: 'Сәйкестендір', tf: 'Дұрыс па, бұрыс па?', calc: 'Есептің шешуі мен жауабы', open: '💡 Логикалық дәлелдеу' };
+
+function tableHTML(t) {
+  return `<div class="tbl-wrap"><table class="part-table"><tr>${t.head.map(h => `<th>${esc(h)}</th>`).join('')}</tr>
+    ${t.rows.map(r => `<tr>${r.map(c => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</table></div>`;
+}
+
+function partInput(p, i, taskId) {
+  const n = `${taskId}-${i}`;
+  switch (p.kind) {
+    case 'choice':
+      return `<div class="opts">${p.options.map((o, k) =>
+        `<label class="opt"><input type="radio" name="${n}" value="${k}"> <b>${LETTERS[k]})</b> ${esc(o)}</label>`).join('')}</div>`;
+    case 'match':
+      return `<div class="match">
+        <ol class="match-left">${p.left.map((l, k) => `<li><span>${esc(l)}</span>
+          <select data-k="${k}" aria-label="${k + 1}"><option value="">—</option>${p.right.map((_, r) => `<option value="${r}">${LETTERS[r]}</option>`).join('')}</select></li>`).join('')}</ol>
+        <ul class="match-right">${p.right.map((r, k) => `<li><b>${LETTERS[k]})</b> ${esc(r)}</li>`).join('')}</ul>
+      </div>`;
+    case 'tf':
+      return `<ol class="tf">${p.statements.map((s, k) => `<li><span>${esc(s)}</span>
+        <span class="tf-btns" data-k="${k}"><button type="button" data-v="1">Дұрыс</button><button type="button" data-v="0">Бұрыс</button></span></li>`).join('')}</ol>`;
+    case 'calc':
+      return `<div class="calc">
+        <label>Берілгені:<textarea data-f="given" rows="3"></textarea></label>
+        <label>Формула және шешуі:<textarea data-f="work" rows="3"></textarea></label>
+        <label class="calc-ans">Жауабы:<input data-f="answer" placeholder="Жауабын бірлігімен жаз"></label>
+      </div>`;
+    case 'open':
+      return `<label class="open-ans">Қорытынды / Дәлел:<textarea rows="4"></textarea></label>`;
+  }
+  return '';
+}
 
 function taskHTML(task, idx, topic) {
   const max = maxOf(task);
   const best = scores[task.id];
-  const keyOf = q => q.kind === 'text' ? (q.accept || []).join(' / ') : `${fmt(q.answer)} ${q.unit || ''}`;
   return `
     <div class="box task case" data-id="${task.id}">
       <div class="case-top">
         <span class="tag">${esc(task.tag || topic?.title || 'Физика')}</span>
-        <span class="max">${best != null ? `<b class="${best === max ? 'ok' : ''}">Ең жақсы: ${fmt(best)}</b> · ` : ''}Максимум: ${max} балл</span>
+        <span class="max">${best != null ? `<b class="${best === max ? 'ok' : ''}">Ең жақсы: ${fmt(best)}</b> · ` : ''}${max} балл</span>
       </div>
-      <h3>${idx}. ${esc(task.title)}</h3>
-      <p class="case-text">${esc(task.text)}</p>
+      <h3>${idx}-тапсырма. ${esc(task.title)}</h3>
       ${task.image ? `<img class="task-img" src="${esc(task.image)}" alt="" loading="lazy">` : ''}
-      <h4>Орындауға арналған сұрақтар</h4>
-      <ol class="qs">${task.questions.map((q, k) => `
-        <li data-q="${k}"><b>${k + 1}-сұрақ.</b> ${esc(q.text)} <span class="pts">${q.points} балл</span>
-          <span class="mark"></span>
-          <span class="answer-key teacher-only">Жауабы: ${esc(keyOf(q))}</span></li>`).join('')}</ol>
-      <label class="ans-label">Жауабыңды осында жаз
-        <span>Формула, есептеу жолы және қорытындыңды жазуға болады.</span>
-        <textarea rows="5" placeholder="Мысалы: Берілгені..., Формуласы..., Есептеуі..., Жауабы..."></textarea>
-      </label>
+      <p class="case-text"><b>Жағдаят.</b> ${esc(task.text)}</p>
+      ${task.parts.map((p, i) => `
+        <section class="part part-${p.kind}" data-i="${i}">
+          <div class="part-head"><b>${esc(p.label)})</b> ${esc(p.text)} <span class="pts">(${p.points} балл)</span><span class="mark"></span></div>
+          ${p.table ? tableHTML(p.table) : ''}
+          <div class="part-kind">${KIND_HINT[p.kind] || ''}</div>
+          ${partInput(p, i, task.id)}
+          <div class="part-note"></div>
+          <div class="answer-key teacher-only">Жауабы: ${esc(partKey(p))}</div>
+        </section>`).join('')}
       <div class="case-btns">
         <button class="check">Жауапты тексеру</button>
         <button class="ghost help">Көмек алу</button>
@@ -125,7 +157,12 @@ function taskHTML(task, idx, topic) {
       </div>
       <div class="hints"></div>
       <div class="result" hidden></div>
-      <details class="solution-box teacher-only-open"><summary>Эталон шешімі</summary><p>${esc(task.solution)}</p></details>
+      <label class="reflect">Кері байланыс. Бүгін мен мынаны үйрендім:<input data-reflect placeholder="..."></label>
+      <details class="solution-box"><summary>Эталон шешімі</summary><p>${esc(task.solution)}</p></details>
+      ${task.rubric?.length ? `<details class="rubric teacher-only"><summary>Бағалау критерийлері</summary>
+        <div class="tbl-wrap"><table class="part-table"><tr><th>№</th><th>Критерий</th><th>Дескриптор (балл беріледі, егер оқушы...)</th><th>Балл</th></tr>
+        ${task.rubric.map((r, k) => `<tr><td>${k + 1}</td><td>${esc(r[0])}</td><td>${esc(r[1])}</td><td>${r[2]}</td></tr>`).join('')}
+        <tr><td></td><td><b>Барлығы</b></td><td></td><td><b>${task.rubric.reduce((a, r) => a + Number(r[2]), 0)}</b></td></tr></table></div></details>` : ''}
     </div>`;
 }
 
@@ -138,61 +175,113 @@ async function callApi(path, body) {
 function bindTasks(root, tasks) {
   root.querySelectorAll('.task.case').forEach(el => {
     const task = tasks.find(t => t.id === el.dataset.id);
-    const ta = el.querySelector('textarea');
     const result = el.querySelector('.result');
     const hintsBox = el.querySelector('.hints');
-    const draftKey = 'f9-draft-' + task.id;
+    const key = 'f9-ans-' + task.id;
     let hintsShown = 0;
 
-    ta.value = store.get(draftKey, '');
-    ta.addEventListener('input', () => store.set(draftKey, ta.value));
+    // Жауаптарды формадан оқу / формаға жазу
+    const read = () => task.parts.map((p, i) => {
+      const s = el.querySelector(`.part[data-i="${i}"]`);
+      switch (p.kind) {
+        case 'choice': { const c = s.querySelector('input:checked'); return c ? +c.value : null; }
+        case 'match': return [...s.querySelectorAll('select')].map(x => x.value === '' ? null : +x.value);
+        case 'tf': return [...s.querySelectorAll('.tf-btns')].map(b => { const on = b.querySelector('.on'); return on ? on.dataset.v === '1' : null; });
+        case 'calc': return [...s.querySelectorAll('[data-f]')].map(x => x.value.trim()).filter(Boolean).join('\n');
+        case 'open': return s.querySelector('textarea').value;
+      }
+    });
+    const readFields = () => ({
+      calc: [...el.querySelectorAll('.part-calc')].map(s => [...s.querySelectorAll('[data-f]')].map(x => x.value)),
+      open: [...el.querySelectorAll('.part-open textarea')].map(x => x.value),
+    });
+    const save = () => store.set(key, { answers: read(), fields: readFields(), reflect: el.querySelector('[data-reflect]').value });
+    const restore = saved => {
+      task.parts.forEach((p, i) => {
+        const s = el.querySelector(`.part[data-i="${i}"]`), v = saved.answers?.[i];
+        if (p.kind === 'choice' && v != null) { const r = s.querySelector(`input[value="${v}"]`); if (r) r.checked = true; }
+        if (p.kind === 'match' && Array.isArray(v)) s.querySelectorAll('select').forEach((x, k) => { x.value = v[k] ?? ''; });
+        if (p.kind === 'tf' && Array.isArray(v)) s.querySelectorAll('.tf-btns').forEach((b, k) => b.querySelectorAll('button').forEach(btn => btn.classList.toggle('on', v[k] != null && (btn.dataset.v === '1') === v[k])));
+      });
+      el.querySelectorAll('.part-calc').forEach((s, k) => s.querySelectorAll('[data-f]').forEach((x, f) => { x.value = saved.fields?.calc?.[k]?.[f] || ''; }));
+      el.querySelectorAll('.part-open textarea').forEach((x, k) => { x.value = saved.fields?.open?.[k] || ''; });
+      el.querySelector('[data-reflect]').value = saved.reflect || '';
+    };
+    restore(store.get(key, {}));
 
-    const showMarks = grade => el.querySelectorAll('.qs li').forEach((li, k) => {
-      li.classList.toggle('q-ok', grade.results[k].ok);
-      li.classList.toggle('q-no', !grade.results[k].ok);
-      li.querySelector('.mark').textContent = grade.results[k].ok ? '✓' : '✗';
+    el.addEventListener('input', save);
+    el.addEventListener('change', save);
+    el.querySelectorAll('.tf-btns button').forEach(b => b.onclick = () => {
+      b.parentElement.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+      save();
     });
 
-    el.querySelector('.check').onclick = async () => {
-      const answer = ta.value.trim();
-      result.hidden = false;
-      if (!answer) { result.className = 'result no'; result.textContent = 'Алдымен жауабыңды жаз.'; return; }
-      const grade = gradeCase(task, answer);   // балл бірден, интернетсіз де
-      showMarks(grade);
+    const showMarks = grade => el.querySelectorAll('section.part').forEach((s, i) => {
+      const r = grade.results[i];
+      s.classList.toggle('q-ok', !r.pending && r.points === r.max);
+      s.classList.toggle('q-part', !r.pending && r.points > 0 && r.points < r.max);
+      s.classList.toggle('q-no', !r.pending && r.points === 0);
+      s.querySelector('.mark').textContent = r.pending ? ' ⏳' : ` ${fmt(r.points)}/${r.max}`;
+      // Сәйкестендіру / дұрыс-бұрыс: қай жолы қате екенін белгілейміз
+      s.querySelectorAll('.match-left li, .tf li').forEach((li, k) => {
+        li.classList.toggle('item-ok', r.items?.[k] === true);
+        li.classList.toggle('item-no', r.items?.[k] === false);
+      });
+      s.querySelector('.part-note').textContent = r.comment ? '🤖 ' + r.comment : '';
+    });
+
+    const finish = grade => {
       if (scores[task.id] == null || grade.score > scores[task.id]) {
         scores[task.id] = grade.score; store.set('f9-scores', scores);
-        el.querySelector('.case-top .max').innerHTML = `<b class="${grade.score === grade.max ? 'ok' : ''}">Ең жақсы: ${fmt(grade.score)}</b> · Максимум: ${grade.max} балл`;
+        el.querySelector('.case-top .max').innerHTML = `<b class="${grade.score === grade.max ? 'ok' : ''}">Ең жақсы: ${fmt(grade.score)}</b> · ${grade.max} балл`;
       }
       if (grade.score === grade.max) markDone(task.id);
-      result.className = 'result ' + (grade.score === grade.max ? 'ok' : grade.score ? 'part' : 'no');
-      result.innerHTML = `<div class="score">Нәтиже: ${fmt(grade.score)} / ${grade.max} балл</div>` +
-        (grade.spam ? '<p>Жауапта сандар тым көп. Тек шешіміңді жаз.</p>' : '<p class="ai muted">🤖 ЖИ жауабыңды талдап жатыр...</p>');
+    };
+
+    el.querySelector('.check').onclick = async () => {
+      const answers = read();
+      const local = gradeTask(task, answers);   // бірден, интернетсіз де
+      result.hidden = false;
+      if (local.results.every(r => r.empty)) { result.className = 'result no'; result.textContent = 'Алдымен жауап жаз.'; return; }
+      showMarks(local);
+      const btn = el.querySelector('.check');
+      btn.disabled = true;
+      result.className = 'result partial';
+      result.innerHTML = `<div class="score">Баға: ${fmt(local.score)} / ${local.max}${local.pending ? ' + логикалық бөлім тексерілуде' : ''}</div><p class="ai muted">🤖 ЖИ жауабыңды талдап жатыр...</p>`;
       el.querySelector('.solution-box').classList.add('can-open');
-      if (grade.spam) return;
+      let grade = local, feedback = '';
       try {
-        const r = await callApi('/api/check', { taskId: task.id, answer });
-        result.querySelector('.ai').className = 'ai';
-        result.querySelector('.ai').textContent = r.feedback ? '🤖 ' + r.feedback : 'Балл есептелді. ЖИ түсініктемесі қазір қолжетімсіз.';
-      } catch {
-        result.querySelector('.ai').textContent = 'Балл есептелді. ЖИ түсініктемесі қазір қолжетімсіз.';
-      }
+        const r = await callApi('/api/check', { taskId: task.id, answers });
+        grade = r; feedback = r.feedback;
+      } catch {}
+      btn.disabled = false;
+      showMarks(grade);
+      finish(grade);
+      result.className = 'result ' + (grade.score === grade.max ? 'ok' : grade.score ? 'partial' : 'no');
+      result.innerHTML = `<div class="score">Баға: ${fmt(grade.score)} / ${grade.max}</div>` +
+        (grade.pending ? '<p class="muted">Логикалық дәлелдеу бөлімін қазір тексеру мүмкін болмады — оны мұғалім бағалайды.</p>' : '') +
+        (feedback ? `<p class="ai">🤖 ${esc(feedback)}</p>` : '');
     };
 
     el.querySelector('.help').onclick = async () => {
-      const add = (text, ai) => hintsBox.insertAdjacentHTML('beforeend', `<div class="hint${ai ? ' ai' : ''}">💡 ${esc(text)}</div>`);
-      if (hintsShown < task.hints.length) { add(task.hints[hintsShown++]); return; }
+      const add = (text, ai) => hintsBox.insertAdjacentHTML('beforeend', `<div class="tip${ai ? ' ai' : ''}">💡 ${esc(text)}</div>`);
+      if (hintsShown < (task.hints || []).length) { add(task.hints[hintsShown++]); return; }
       const btn = el.querySelector('.help');
       btn.disabled = true; btn.textContent = 'Ойланып жатыр...';
-      try { add((await callApi('/api/hint', { taskId: task.id, answer: ta.value })).hint, true); }
+      try { add((await callApi('/api/hint', { taskId: task.id, answers: read() })).hint, true); }
       catch { add('Қазір қосымша көмек қолжетімсіз. Мұғалімнен сұра немесе эталон шешімін тексеріп көр.'); }
       finally { btn.disabled = false; btn.textContent = 'Көмек алу'; }
     };
 
     el.querySelector('.clear').onclick = () => {
-      ta.value = ''; store.set(draftKey, '');
+      el.querySelectorAll('input[type=radio]').forEach(x => { x.checked = false; });
+      el.querySelectorAll('select').forEach(x => { x.value = ''; });
+      el.querySelectorAll('.tf-btns button').forEach(x => x.classList.remove('on'));
+      el.querySelectorAll('.part textarea, .part input:not([type=radio])').forEach(x => { x.value = ''; });
+      el.querySelectorAll('section.part').forEach(s => { s.classList.remove('q-ok', 'q-no', 'q-part'); s.querySelector('.mark').textContent = ''; s.querySelector('.part-note').textContent = ''; });
+      el.querySelectorAll('.item-ok, .item-no').forEach(li => li.classList.remove('item-ok', 'item-no'));
       result.hidden = true; hintsBox.innerHTML = ''; hintsShown = 0;
-      el.querySelectorAll('.qs li').forEach(li => { li.classList.remove('q-ok', 'q-no'); li.querySelector('.mark').textContent = ''; });
-      ta.focus();
+      save();
     };
   });
 }
@@ -231,6 +320,7 @@ function renderTopic() {
     <div>
       <h1>${esc(t.title)}</h1>
       <p class="lead">${i + 1}-бөлім · ${esc(t.short)}</p>
+      ${t.goal ? `<p class="goal"><b>Сабақ мақсаты:</b> ${esc(t.goal)}</p>` : ''}
 
       <div class="stage"><span class="b">1 кезең</span> Проблемалық жағдаят</div>
       <div class="box problem">

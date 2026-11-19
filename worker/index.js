@@ -1,11 +1,12 @@
 // Cloudflare Worker: сайт файлдарын береді, D1 базасынан мазмұнды оқиды, мұғалім кабинетінің API-ін
-// және жауапты ЖИ-мен тексеруді жүзеге асырады. Балл кодпен есептеледі (js/grade.js), ЖИ тек түсініктеме жазады.
+// және жауапты тексереді: таңдау/сәйкестендіру/есепті код бағалайды (js/grade.js), логикалық дәлелдеуді — ЖИ критерийлер бойынша.
 import '../js/grade.js';
 import '../js/cases.js';
+import '../js/tasks.js';
 import { handleAuth, currentTeacher } from './auth.js';
 import { handleAdmin } from './admin.js';
 
-const MAX_ANSWER = 3000;
+const MAX_ANSWER = 4000;
 
 const json = (data, status = 200, headers = {}) => new Response(JSON.stringify(data), {
   status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...headers },
@@ -13,7 +14,7 @@ const json = (data, status = 200, headers = {}) => new Response(JSON.stringify(d
 
 const parse = (v, def) => { try { return JSON.parse(v); } catch { return def; } };
 
-// Бүкіл мазмұн бір сұраныспен: тақырыптар + бөлімдер + есептер
+// Бүкіл мазмұн бір сұраныспен: тақырыптар + бөлімдер + тапсырмалар
 async function loadContent(env) {
   const [t, s, x] = await env.DB.batch([
     env.DB.prepare('select * from topics order by position'),
@@ -21,121 +22,170 @@ async function loadContent(env) {
     env.DB.prepare('select * from tasks order by position'),
   ]);
   return t.results.map(r => ({
-    id: r.id, title: r.title, short: r.short, icon: r.icon, color: r.color,
+    id: r.id, title: r.title, short: r.short, icon: r.icon, color: r.color, goal: r.goal || '',
     problem: { title: r.problem_title, text: r.problem_text, questions: parse(r.problem_questions, []), image: r.problem_image },
     formulas: parse(r.formulas, []), ai: parse(r.ai, []), teacher: r.teacher,
     sections: s.results.filter(z => z.topic_id === r.id).map(z => ({ id: z.id, title: z.title, theory: z.theory })),
-    tasks: x.results.filter(z => z.topic_id === r.id).map(z => ({
-      id: z.id, title: z.title, tag: z.tag, text: z.text, questions: parse(z.questions, []),
-      hints: parse(z.hints, []), solution: z.solution, image: z.image,
-    })),
+    tasks: x.results.filter(z => z.topic_id === r.id).map(taskRow),
   }));
 }
 
-// Алдымен базадан; база қолжетімсіз болса — кірістірілген есептерден (js/cases.js)
+const taskRow = z => ({
+  id: z.id, title: z.title, tag: z.tag, text: z.text, image: z.image,
+  parts: parse(z.parts, []), rubric: parse(z.rubric, []), hints: parse(z.hints, []), solution: z.solution,
+});
+
+// Алдымен базадан; база қолжетімсіз болса — кірістірілген тапсырмалардан (js/tasks.js)
 async function loadTask(env, id) {
   try {
-    const r = await env.DB.prepare('select id, title, text, questions, hints, solution from tasks where id = ?').bind(id).first();
-    return r && { ...r, questions: parse(r.questions, []), hints: parse(r.hints, []) };
+    const r = await env.DB.prepare('select * from tasks where id = ?').bind(id).first();
+    return r && taskRow(r);
   } catch (e) {
     console.log('db unavailable, using built-in tasks:', e.message);
-    return Object.values(globalThis.CASES).flat().find(t => t.id === id) || null;
+    return globalThis.allBuiltinTasks().find(t => t.id === id) || null;
   }
 }
 
-const fmtNum = n => String(n).replace('.', ',');
-
-function describeTask(task, grade) {
-  return task.questions.map((q, i) => {
-    const key = q.kind === 'text' ? (q.accept || [])[0] : `${fmtNum(q.answer)} ${q.unit || ''}`.trim();
-    const status = grade ? (grade.results[i].ok ? 'CORRECT' : 'NOT FOUND / WRONG') : '';
-    return `${i + 1}-сұрақ (${q.points} pt): ${q.text}\n   correct answer: ${key}${status ? `\n   automatic check: ${status}` : ''}`;
-  }).join('\n');
+// Оқушы жауабын ЖИ-ге түсінікті мәтінге айналдыру
+function studentAnswer(part, v) {
+  const L = globalThis.LETTERS;
+  switch (part.kind) {
+    case 'choice': return v == null || v === '' ? '(жауап жоқ)' : `${L[v]}) ${part.options[v] || ''}`;
+    case 'match': return (part.left || []).map((_, i) => `${i + 1}—${v?.[i] == null || v[i] === '' ? '?' : L[v[i]]}`).join(', ');
+    case 'tf': return (part.statements || []).map((_, i) => `${i + 1}—${v?.[i] === true ? 'Дұрыс' : v?.[i] === false ? 'Бұрыс' : '?'}`).join(', ');
+    default: return String(v || '').trim() || '(бос)';
+  }
 }
 
-const SYSTEM = `You are a kind physics teacher's assistant for 9th grade students in Kazakhstan.
-ALWAYS write ONLY in the Kazakh language (Cyrillic), correct and simple. Address the student as "сен" everywhere (never "сіз", never "-ңыз/-іңіз" forms).
-Refer to questions as "1-сұрақ", "2-сұрақ" (never "Q1"). Write formulas as plain text like v = s / t (no $ signs, no LaTeX).
-Never reveal the correct final numeric answers of questions the student got wrong or has not solved yet.
-Do not use markdown headings, tables or LaTeX. Plain text, short.`;
+function describe(task, answers, grade) {
+  return task.parts.map((p, i) => {
+    const r = grade.results[i];
+    const status = p.kind === 'open' ? 'TO BE GRADED BY YOU' : `auto-graded: ${r.points}/${r.max}`;
+    return `PART ${p.label}) [${p.kind}, ${p.points} pt, ${status}]
+   Question: ${p.text}${p.table ? `\n   Table: ${JSON.stringify(p.table)}` : ''}
+   Correct answer / criteria: ${globalThis.partKey(p)}
+   Student: """${studentAnswer(p, answers[i]).slice(0, MAX_ANSWER)}"""`;
+  }).join('\n\n');
+}
 
-function checkPrompt(task, grade, answer) {
+const SYSTEM = `You are a fair physics teacher's assistant for 9th grade students in Kazakhstan.
+ALWAYS write ONLY in the Kazakh language (Cyrillic), correct and simple. Address the student as "сен" (never "сіз", never "-ңыз/-іңіз" forms).
+Refer to parts as "а) бөлім", "ә) бөлім", "б) бөлім". Write formulas as plain text like v = s / t (no $ signs, no LaTeX, no markdown).
+Never reveal the correct final numeric answers of parts the student got wrong or left empty.`;
+
+function checkPrompt(task, answers, grade) {
+  const open = task.parts.map((p, i) => ({ p, i })).filter(x => x.p.kind === 'open');
   return `Task: ${task.title}
 Situation: ${task.text}
 
-Questions (the score was computed automatically and is final, do not change it):
-${describeTask(task, grade)}
+${describe(task, answers, grade)}
 
 Teacher's reference solution (for you only): ${task.solution}
 
-Student score: ${grade.score} / ${grade.max}
-Student's answer:
-"""${answer}"""
+1) Grade each "open" part strictly by its criteria (each criterion says how many points it gives). Give a point only if the student's text really contains that idea; empty or off-topic answers get 0. Do not give more than the part's maximum.
+2) Write short feedback for the whole task (2–4 sentences, Kazakh): what is good, which parts are wrong and what to check (formula, units, arithmetic, reasoning), without giving correct numbers.
 
-Write feedback to the student in Kazakh, 2–4 short sentences:
-- what is done well (formula, steps, units);
-- for each wrong question, name the likely mistake (wrong formula, units, arithmetic, missing step) and what to check, WITHOUT giving the correct number;
-- if everything is correct, praise briefly.`;
+Answer ONLY with JSON, no other text:
+{"open": [${open.map(x => `{"part": "${x.p.label}", "points": <0..${x.p.points}>, "comment": "<1 sentence in Kazakh>"}`).join(', ')}], "feedback": "<2-4 sentences in Kazakh>"}`;
 }
 
-function hintPrompt(task, grade, answer) {
-  const next = grade.results.findIndex(r => !r.ok);
+function hintPrompt(task, answers, grade) {
+  const i = Math.max(0, grade.results.findIndex((r, k) => task.parts[k].kind === 'open' ? !String(answers[k] || '').trim() : !r.ok));
   return `Task: ${task.title}
 Situation: ${task.text}
 
-Questions:
-${describeTask(task, grade)}
+${describe(task, answers, grade)}
 
 Teacher's reference solution (for you only): ${task.solution}
 
-Student's current work:
-"""${answer || '(empty)'}"""
-
-The student asked for help. Give ONE short hint in Kazakh (1–2 sentences) for ${next + 1}-сұрақ:
-point to the needed formula or the next step, based on what the student already wrote. Do NOT give the final number.`;
+The student asked for help with part ${task.parts[i].label}). Give ONE short hint in Kazakh (1–2 sentences):
+point to the needed law, formula or next step, based on what the student already wrote. Do NOT give the final answer, number or letter.`;
 }
 
 // Модель кейде LaTeX немесе «Q1» деп жазады — оқушыға түсінікті мәтінге келтіреміз
-const GREEK = { mu: 'μ', Delta: 'Δ', lambda: 'λ', nu: 'ν', cdot: '·', pi: 'π', times: '×' };
+const GREEK = { mu: 'μ', Delta: 'Δ', lambda: 'λ', nu: 'ν', cdot: '·', pi: 'π', times: '×', alpha: 'α', varphi: 'φ', phi: 'φ', omega: 'ω' };
 function cleanAI(text) {
   return String(text)
     .replace(/<think>[\s\S]*?<\/think>/g, '')
-    .replace(/\bQ(\d+)\b/g, '$1-сұрақ')
-    .replace(/\\(mu|Delta|lambda|nu|cdot|pi|times)\b/g, (_, w) => GREEK[w])
-    .replace(/\$+/g, '')
+    .replace(/\\(mu|Delta|lambda|nu|cdot|pi|times|alpha|varphi|phi|omega)\b/g, (_, w) => GREEK[w])
+    .replace(/\\(frac|sqrt)\{([^}]*)\}\{([^}]*)\}/g, '($2)/($3)')
+    .replace(/[$*#]+/g, '')
     .replace(/[ \t]+/g, ' ')
     .trim();
 }
 
-async function askAI(env, prompt) {
+// Qwen3 әдепкіде алдымен «ойланады» және токен лимитін соған жұмсап қоюы мүмкін — «/no_think» бұны өшіреді
+async function askAI(env, prompt, max_tokens = 900) {
   const out = await env.AI.run(env.AI_MODEL, {
-    messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: prompt }],
-    max_tokens: 400,
-    temperature: 0.3,
+    messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: prompt + '\n/no_think' }],
+    max_tokens, temperature: 0.2,
   });
-  const text = typeof out === 'string' ? out : (out.response ?? out.choices?.[0]?.message?.content ?? '');
-  return cleanAI(text);
+  const res = typeof out === 'string' ? out : (out.response ?? out.choices?.[0]?.message?.content ?? '');
+  // Workers AI жауап JSON болса, оны өзі объектіге айналдырып береді
+  if (res && typeof res === 'object') return JSON.stringify(res);
+  const text = String(res).replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+  if (!text) console.log('ai empty answer', JSON.stringify(out).slice(0, 300));
+  return text;
 }
 
-async function handleCheck(env, path, body) {
-  const answer = String(body.answer || '').slice(0, MAX_ANSWER);
-  if (!body.taskId) return json({ error: 'taskId' }, 400);
+// ЖИ жауабынан JSON-ды шығарып алу (модель кейде алдына-артына мәтін қосады)
+function parseAIJson(text) {
+  const m = /\{[\s\S]*\}/.exec(String(text));
+  if (!m) return null;
+  try { return JSON.parse(m[0]); } catch { return null; }
+}
 
+const normAnswers = (task, raw) => task.parts.map((p, i) => {
+  const v = raw?.[i];
+  if (p.kind === 'calc' || p.kind === 'open') return String(v ?? '').slice(0, MAX_ANSWER);
+  if (p.kind === 'choice') return v === '' || v == null ? null : Number(v);
+  if (p.kind === 'match') return Array.isArray(v) ? v.slice(0, 10).map(x => x === '' || x == null ? null : Number(x)) : [];
+  if (p.kind === 'tf') return Array.isArray(v) ? v.slice(0, 10).map(x => typeof x === 'boolean' ? x : null) : [];
+  return null;
+});
+
+async function handleCheck(env, path, body) {
+  if (!body.taskId) return json({ error: 'taskId' }, 400);
   const task = await loadTask(env, String(body.taskId));
   if (!task) return json({ error: 'not found' }, 404);
-  const grade = globalThis.gradeCase(task, answer);
+  const answers = normAnswers(task, body.answers);
+  const grade = globalThis.gradeTask(task, answers);
+  const anyAnswer = grade.results.some(r => !r.empty);
 
   if (path === '/api/check') {
-    if (!answer.trim()) return json({ error: 'empty' }, 400);
-    let feedback = '';
-    if (!grade.spam) {
-      try { feedback = await askAI(env, checkPrompt(task, grade, answer)); } catch (e) { console.log('ai error', e.message); }
+    if (!anyAnswer) return json({ error: 'empty', message: 'Алдымен жауап жаз.' }, 400);
+    let feedback = '', aiOk = false;
+    if (!grade.results.some(r => r.spam)) {
+      try {
+        const raw = await askAI(env, checkPrompt(task, answers, grade), 1200);
+        const ai = parseAIJson(raw);
+        if (!ai) console.log('ai bad json', raw.slice(0, 600));
+        if (ai) {
+          aiOk = true;
+          feedback = cleanAI(ai.feedback || '');
+          const openIdx = task.parts.map((p, i) => p.kind === 'open' ? i : -1).filter(i => i >= 0);
+          task.parts.forEach((p, i) => {
+            if (p.kind !== 'open') return;
+            const r = grade.results[i];
+            // Бөлімді әрпі бойынша табамыз («б», «б)», «б) бөлім»); табылмаса — реті бойынша
+            const g = (ai.open || []).find(o => String(o.part).trim().toLowerCase().startsWith(p.label))
+              || (ai.open || [])[openIdx.indexOf(i)];
+            r.pending = false;
+            r.points = r.empty ? 0 : Math.max(0, Math.min(p.points, Math.round(Number(g?.points) || 0)));
+            r.ok = r.points === r.max;
+            r.comment = r.empty ? '' : cleanAI(g?.comment || '');
+            r.ai = true;
+          });
+        }
+      } catch (e) { console.log('ai error', e.message); }
     }
-    return json({ ...grade, feedback });
+    grade.score = grade.results.reduce((a, r) => a + r.points, 0);
+    grade.pending = grade.results.some(r => r.pending);
+    return json({ ...grade, feedback, aiOk });
   }
 
-  if (grade.score === grade.max && answer.trim()) return json({ hint: 'Барлық сұраққа дұрыс жауап бердің — көмек қажет емес! 👏' });
-  try { return json({ hint: await askAI(env, hintPrompt(task, grade, answer)) }); }
+  if (grade.score === grade.max) return json({ hint: 'Барлық бөлімге дұрыс жауап бердің — көмек қажет емес! 👏' });
+  try { return json({ hint: cleanAI(await askAI(env, hintPrompt(task, answers, grade), 500)) }); }
   catch (e) { console.log('ai error', e.message); return json({ error: 'ai' }, 503); }
 }
 

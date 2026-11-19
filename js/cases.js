@@ -287,5 +287,4 @@ const CASES = {
   ],
 };
 
-if (typeof TOPICS !== 'undefined') TOPICS.forEach(t => { t.tasks = CASES[t.id] || []; });
 globalThis.CASES = CASES; // Worker база қолжетімсіз кезде осыдан оқиды

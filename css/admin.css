@@ -99,3 +99,14 @@
 .invite-result .code { font: 800 26px/1.2 ui-monospace, Consolas, monospace; letter-spacing: 2px; color: var(--navy); margin: 6px 0; user-select: all; }
 .teacher-list .status { font-size: 12px; color: var(--muted); margin-left: 8px; }
 .teacher-list .acts { display: flex; gap: 6px; }
+.ans-row { display: grid; grid-template-columns: 90px 1fr 90px 90px auto 70px auto; gap: 6px; align-items: center; }
+.ans-row .wide { grid-column: span 4; }
+.ans-row .chk { display: flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.pts-in { width: 70px !important; }
+.pts-label { display: flex !important; align-items: center; gap: 6px; }
+.item-head select { width: auto !important; padding: 5px 8px !important; font-size: 13px !important; }
+.label.short, label.short { max-width: 420px; }
+.part-add { display: flex; gap: 8px; }
+.part-add select { width: auto !important; }
+.admin textarea.tall-s { min-height: 110px; }
+@media (max-width: 860px) { .ans-row { grid-template-columns: 1fr 1fr; } .ans-row .wide { grid-column: span 2; } }
