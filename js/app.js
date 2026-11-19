@@ -296,15 +296,18 @@ function bindTasks(root, tasks) {
 // ---------- Басты бет ----------
 function renderHome() {
   document.getElementById('cards').innerHTML = DATA.map((t, i) => {
-    const n = t.tasks.filter(x => done.has(x.id)).length;
+    // Прогресс — жиналған балл (әр тапсырманың ең жақсы нәтижесі) және тексерілген тапсырмалар саны
+    const max = t.tasks.reduce((a, x) => a + maxOf(x), 0);
+    const got = t.tasks.reduce((a, x) => a + (scores[x.id] || 0), 0);
+    const n = t.tasks.filter(x => scores[x.id] != null).length;
     return `
       <a class="card" href="topic.html?t=${t.id}">
         <span class="num">${i + 1}</span>
         <div class="ic">${ICONS[t.icon]}</div>
         <h3>${esc(t.title)}</h3>
         <p>${esc(t.short)}</p>
-        <div class="progress"><span style="width:${(n / t.tasks.length) * 100}%"></span></div>
-        <div class="progress-label">${n}/${t.tasks.length} тапсырма орындалды</div>
+        <div class="progress"><span style="width:${max ? got / max * 100 : 0}%"></span></div>
+        <div class="progress-label">${fmt(got)}/${max} балл · ${n}/${t.tasks.length} тапсырма тексерілді</div>
       </a>`;
   }).join('');
 }
@@ -316,6 +319,14 @@ const SKILLS = [
   { title: 'Есептеу дағдысы', kinds: ['calc'], cls: 'c2' },
   { title: 'Логикалық дәлелдеу', kinds: ['open'], cls: 'c3' },
 ];
+// Бөлімдегі тапсырмалардың құрамы: «Тапсырмаларда: жағдаят, тест, есептеу, логикалық дәлелдеу.»
+function partsSummary(t) {
+  const kinds = new Set(t.tasks.flatMap(x => x.parts.map(p => p.kind)));
+  const has = ks => ks.some(k => kinds.has(k));
+  const list = ['өмірлік жағдаят', has(['choice', 'match', 'tf']) && 'тест және сәйкестендіру', has(['calc']) && 'есептеу', has(['open']) && 'логикалық дәлелдеу'].filter(Boolean);
+  return `Тапсырмаларда: ${list.join(', ')}.`;
+}
+
 const rating = p => p >= 85 ? 'Өте жақсы нәтиже' : p >= 70 ? 'Жақсы нәтиже' : p >= 50 ? 'Қанағаттанарлық нәтиже' : 'Тақырыпты қайталау керек';
 const pct = (a, b) => b ? Math.round(a / b * 1000) / 10 : 0;
 
@@ -368,7 +379,7 @@ function renderTopic() {
       ${t.goal ? `<div class="box ov-block"><h3>Сабақ мақсаты</h3><p>${esc(t.goal)}</p></div>` : ''}
       ${t.sections.length ? `<div class="box ov-block"><h3>Бөлім тақырыптары</h3><ul>${t.sections.map(s => `<li>${esc(s.title)}</li>`).join('')}</ul></div>` : ''}
       ${theory.length ? `<div class="theory">${theory.map(s => `<details class="box"><summary>${esc(s.title)}</summary><div class="md">${md(s.theory)}</div></details>`).join('')}</div>` : ''}
-      <div class="box ov-block"><h3>Тапсырмалар</h3><p>${t.tasks.length} контекстік тапсырма, барлығы ${total} балл. Әр тапсырмада жағдаят, есеп және логикалық дәлелдеу бар; жауабыңды «Жауапты тексеру» батырмасымен бірден тексере аласың.</p></div>
+      <div class="box ov-block"><h3>Тапсырмалар</h3><p>${t.tasks.length} контекстік тапсырма, барлығы ${total} балл. ${partsSummary(t)} Жауабыңды «Жауапты тексеру» батырмасымен бірден тексере аласың.</p></div>
       ${t.ai.length ? `<div class="ai-card"><h3>🤖 ЖИ-мен зерттеу</h3><ul>${t.ai.map(a => `<li>${esc(a)}</li>`).join('')}</ul>
         <div class="warn">ЖИ қателесуі мүмкін — әр жауапты формуламен немесе оқулықпен тексер.</div></div>` : ''}
       ${t.teacher ? `<div class="side-card teacher-card teacher-only"><h3>👩‍🏫 Мұғалімге кеңес</h3><p style="margin:0;font-size:14px">${esc(t.teacher)}</p></div>` : ''}
@@ -436,20 +447,28 @@ function renderTasks() {
   const params = new URLSearchParams(location.search);
   let filter = params.get('t') || 'all';
   const q = (params.get('q') || '').trim().toLowerCase();
-  const all = DATA.flatMap(t => t.tasks.map(x => ({ ...x, topic: t })));
+  const all = DATA.flatMap(t => t.tasks.map((x, k) => ({ ...x, topic: t, num: k + 1 })));
 
   const chips = document.getElementById('chips');
   const list = document.getElementById('list');
+  const item = x => {
+    const max = maxOf(x), s = scores[x.id];
+    const st = s == null ? '<span class="tl-st">Бастау →</span>' : `<span class="tl-st ${s === max ? 'ok' : 'part'}">${s === max ? '✓ ' : ''}${fmt(s)}/${max}</span>`;
+    return `<a class="tl-item" href="topic.html?t=${x.topic.id}#task-${x.num}">
+      ${x.image ? `<img src="${esc(x.image)}" alt="" loading="lazy">` : `<span class="tl-ic">${ICONS[x.topic.icon] || ''}</span>`}
+      <span class="tl-main"><b>${x.num}-тапсырма. ${esc(x.title)}</b><small>${esc(x.topic.title)} · ${max} балл</small></span>${st}</a>`;
+  };
   const draw = () => {
     chips.innerHTML = [['all', 'Барлығы'], ...DATA.map(t => [t.id, t.title])]
       .map(([id, label]) => `<button class="chip ${id === filter ? 'active' : ''}" data-id="${id}">${esc(label)}</button>`).join('');
     const items = all.filter(x =>
       (filter === 'all' || x.topic.id === filter) &&
-      (!q || (x.title + ' ' + x.text + ' ' + x.topic.title).toLowerCase().includes(q)));
-    list.innerHTML = items.length
-      ? items.map((x, k) => taskHTML(x, k + 1, x.topic)).join('')
-      : `<div class="empty">«${esc(q)}» бойынша ештеңе табылмады.</div>`;
-    bindTasks(list, items);
+      (!q || (x.title + ' ' + x.text + ' ' + x.topic.title + ' ' + x.parts.map(p => p.text).join(' ')).toLowerCase().includes(q)));
+    if (!items.length) { list.innerHTML = `<div class="empty">${q ? `«${esc(q)}» бойынша ештеңе табылмады.` : 'Тапсырмалар жоқ.'}</div>`; return; }
+    // Бөлімдер бойынша топтап шығарамыз
+    list.innerHTML = DATA.filter(t => items.some(x => x.topic === t)).map((t, gi) => `
+      <h2 class="tl-group">${esc(t.title)}</h2>
+      <div class="task-list">${items.filter(x => x.topic === t).map(item).join('')}</div>`).join('');
   };
   chips.onclick = e => { const b = e.target.closest('.chip'); if (b) { filter = b.dataset.id; draw(); } };
   if (q) document.getElementById('qinfo').textContent = `Іздеу: «${params.get('q')}»`;

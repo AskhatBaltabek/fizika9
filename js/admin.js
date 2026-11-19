@@ -487,7 +487,16 @@ async function save() {
     setDirty(false);
     renderList();
     const warn = leaks(t);
-    if (warn.length) toast(`Сақталды. Назар аударыңыз: ${warn.join('; ')} — жауап шарттағы санмен бірдей, оқушы оны көшіріп балл алуы мүмкін. «бірлігімен» белгісін қойыңыз.`, true);
+    // Бөліктердің балы мен «Бағалау критерийлері» кестесінің қосындысы сәйкес келуі керек
+    const mismatch = t.tasks.map((x, i) => {
+      const parts = x.parts.reduce((a, p) => a + (Number(p.points) || 0), 0);
+      const rub = (x.rubric || []).reduce((a, r) => a + (Number(r[2]) || 0), 0);
+      return x.rubric?.length && parts !== rub ? `${i + 1}-тапсырма: бөліктер ${parts} балл, критерийлер ${rub} балл` : null;
+    }).filter(Boolean);
+    const notes = [];
+    if (warn.length) notes.push(`${warn.join('; ')} — жауап шарттағы санмен бірдей, оқушы оны көшіріп балл алуы мүмкін («бірлігімен» белгісін қойыңыз)`);
+    if (mismatch.length) notes.push(`${mismatch.join('; ')} — балдар сәйкес емес`);
+    if (notes.length) toast(`Сақталды. Назар аударыңыз: ${notes.join('. ')}.`, true);
     else toast('Сақталды ✓');
   } catch (e) {
     if (!handleAuthError(e)) toast('Сақтау қатесі: ' + e.message, true);

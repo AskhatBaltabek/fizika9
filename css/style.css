@@ -368,3 +368,18 @@ th { color: var(--navy); }
   .side .side-title { padding-bottom: 8px; }
   .step-nav .btn { flex: 1; justify-content: center; }
 }
+
+/* ---------- Тапсырмалар жинағы: ықшам тізім ---------- */
+.tl-group { font-size: 17px; color: var(--navy); margin: 22px 0 10px; text-transform: uppercase; }
+.task-list { display: grid; gap: 8px; }
+.tl-item { display: grid; grid-template-columns: 96px 1fr auto; gap: 14px; align-items: center; background: #fff; border-radius: 14px; box-shadow: var(--shadow); padding: 10px 14px 10px 10px; text-decoration: none; border: 1.5px solid transparent; }
+.tl-item:hover { border-color: var(--teal); }
+.tl-item img { width: 96px; height: 60px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); background: #fff; }
+.tl-ic { width: 96px; height: 60px; border-radius: 8px; background: var(--bg); display: grid; place-items: center; }
+.tl-ic svg { width: 44px; height: 44px; }
+.tl-main { display: grid; gap: 2px; min-width: 0; }
+.tl-main b { color: var(--text); font-size: 15px; }
+.tl-main small { color: var(--muted); font-size: 13px; }
+.tl-st { font-size: 13px; font-weight: 700; color: var(--teal); white-space: nowrap; }
+.tl-st.ok { color: var(--ok); } .tl-st.part { color: var(--orange); }
+@media (max-width: 860px) { .tl-item { grid-template-columns: 64px 1fr; } .tl-item img, .tl-ic { width: 64px; height: 48px; } .tl-st { grid-column: 2; } }
