@@ -367,6 +367,7 @@ th { color: var(--navy); }
   .side .side-title { padding-bottom: 8px; }
   .step-nav .btn { flex: 1; justify-content: center; }
   .step-nav .nx-name { display: none; }
+  .step-nav .btn { padding: 12px 10px; }
 }
 
 /* ---------- Тапсырмалар жинағы: ықшам тізім ---------- */

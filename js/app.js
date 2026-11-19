@@ -416,7 +416,7 @@ function renderTopic() {
         <textarea id="topic-reflect" rows="4" placeholder="Осы тараудан үйренген басты физикалық заңдылықтарыңды жаз..."></textarea></label>
       <div class="step-nav">
         <a class="btn btn-ghost" href="#${t.tasks.length ? 'task-' + t.tasks.length : 'overview'}">← Артқа</a>
-        ${next ? `<a class="btn btn-primary" href="topic.html?t=${next.id}">Келесі бөлім<span class="nx-name">: ${esc(next.title)}</span> →</a>` : '<a class="btn btn-primary" href="index.html">Барлық бөлімдер</a>'}
+        ${next ? `<a class="btn btn-primary" href="topic.html?t=${next.id}"><span>Келесі бөлім<span class="nx-name">: ${esc(next.title)}</span> →</span></a>` : '<a class="btn btn-primary" href="index.html">Барлық бөлімдер</a>'}
       </div>`;
   }
 
