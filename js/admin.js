@@ -17,11 +17,11 @@ function toast(text, err = false) {
   el.className = 'toast' + (err ? ' err' : '');
   el.hidden = false;
   clearTimeout(toast.t);
-  toast.t = setTimeout(() => el.hidden = true, 3500);
+  toast.t = setTimeout(() => el.hidden = true, Math.max(3500, text.length * 70));
 }
 
 function show(view) {
-  ['login', 'reset', 'denied', 'topics', 'teachers'].forEach(v => $('#v-' + v).hidden = v !== view);
+  ['login', 'invite', 'topics', 'teachers'].forEach(v => $('#v-' + v).hidden = v !== view);
   const inApp = view === 'topics' || view === 'teachers';
   $('.admin .nav').style.visibility = inApp ? 'visible' : 'hidden';
   $$('.nav a[data-tab]').forEach(a => a.classList.toggle('active', a.dataset.tab === view));
@@ -35,75 +35,75 @@ function setDirty(v) {
 window.addEventListener('beforeunload', e => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
 
 // ---------- Кіру ----------
-if (!sb) {
-  document.body.innerHTML = '<div class="auth"><div class="box auth-box"><h1>Supabase бапталмаған</h1><p>js/config.js файлына SUPABASE_URL және SUPABASE_ANON_KEY мәндерін жазыңыз.</p></div></div>';
-  throw new Error('Supabase is not configured');
-}
-
-$('#login-form').onsubmit = async e => {
-  e.preventDefault();
-  const f = e.target, msg = $('#login-msg');
-  msg.className = 'msg'; msg.textContent = 'Күте тұрыңыз...';
-  const { error } = await sb.auth.signInWithPassword({ email: f.email.value.trim(), password: f.password.value });
-  if (error) {
-    msg.className = 'msg err';
-    msg.textContent = /confirm/i.test(error.message) ? 'Алдымен поштаңызға келген хаттағы сілтемені басыңыз.' : 'Email немесе құпиясөз қате.';
-  }
-};
-
-$('#signup').onclick = async e => {
-  e.preventDefault();
-  const f = $('#login-form'), msg = $('#login-msg');
-  if (!f.reportValidity()) return;
-  const { error } = await sb.auth.signUp({
-    email: f.email.value.trim(), password: f.password.value,
-    options: { emailRedirectTo: location.href.split('#')[0] },
-  });
-  msg.className = 'msg ' + (error ? 'err' : 'ok');
-  msg.textContent = error ? 'Қате: ' + error.message : 'Поштаңызды тексеріп, хаттағы сілтемені басыңыз. Содан кейін осында кіріңіз.';
-};
-
-$('#forgot').onclick = async e => {
-  e.preventDefault();
-  const email = $('#login-form').email.value.trim(), msg = $('#login-msg');
-  if (!email) { msg.className = 'msg err'; msg.textContent = 'Алдымен email жазыңыз.'; return; }
-  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.href.split('#')[0] });
-  msg.className = 'msg ' + (error ? 'err' : 'ok');
-  msg.textContent = error ? 'Қате: ' + error.message : 'Құпиясөзді қалпына келтіру сілтемесі поштаңызға жіберілді.';
-};
-
-$('#reset-form').onsubmit = async e => {
-  e.preventDefault();
-  const { error } = await sb.auth.updateUser({ password: e.target.password.value });
-  if (error) { $('#reset-msg').className = 'msg err'; $('#reset-msg').textContent = error.message; return; }
-  toast('Құпиясөз өзгертілді');
-  recovering = false;
-  history.replaceState(null, '', location.pathname);
-  start();
-};
-
-$('#logout').onclick = () => sb.auth.signOut();
-
-let started = false;
-let recovering = /type=recovery/.test(location.hash);
-sb.auth.onAuthStateChange((event, session) => {
-  if (event === 'PASSWORD_RECOVERY') { recovering = true; return show('reset'); }
-  if (!session) { started = false; userEmail = ''; $('#who').textContent = ''; $('#logout').hidden = true; return show('login'); }
-  if (!started) { started = true; setTimeout(start, 0); }
-});
-
-async function start() {
-  if (recovering) return show('reset');
-  const { data: { user } } = await sb.auth.getUser();
-  if (!user) return show('login');
-  userEmail = user.email.toLowerCase();
-  $('#who').textContent = userEmail;
+function signedIn(email) {
+  userEmail = email;
+  $('#who').textContent = email;
   $('#logout').hidden = false;
-  const { data: ok } = await sb.rpc('is_teacher');
-  if (!ok) { $('#denied-email').textContent = userEmail; return show('denied'); }
-  await reload();
-  show('topics');
 }
+
+function signedOut() {
+  userEmail = '';
+  $('#who').textContent = '';
+  $('#logout').hidden = true;
+  show('login');
+}
+
+async function formSubmit(form, msgEl, path, body) {
+  msgEl.className = 'msg'; msgEl.textContent = 'Күте тұрыңыз...';
+  const btn = $('button[type=submit]', form);
+  btn.disabled = true;
+  try {
+    const r = await api(path, body);
+    msgEl.textContent = '';
+    form.reset();
+    signedIn(r.email);
+    await reload();
+    show('topics');
+  } catch (e) {
+    msgEl.className = 'msg err'; msgEl.textContent = e.message;
+  } finally { btn.disabled = false; }
+}
+
+$('#login-form').onsubmit = e => {
+  e.preventDefault();
+  const f = e.target;
+  formSubmit(f, $('#login-msg'), '/api/auth/login', { email: f.email.value, password: f.password.value });
+};
+
+$('#invite-form').onsubmit = e => {
+  e.preventDefault();
+  const f = e.target, msg = $('#invite-msg');
+  if (f.password.value !== f.password2.value) { msg.className = 'msg err'; msg.textContent = 'Құпиясөздер сәйкес келмейді.'; return; }
+  formSubmit(f, msg, '/api/auth/accept-invite', { email: f.email.value, code: f.code.value, password: f.password.value });
+};
+
+$('#to-invite').onclick = e => { e.preventDefault(); $('#invite-form').email.value = $('#login-form').email.value; show('invite'); };
+$('#to-login').onclick = e => { e.preventDefault(); show('login'); };
+
+$('#logout').onclick = async () => {
+  if (dirty && !confirm('Сақталмаған өзгерістер жоғалады. Шығасыз ба?')) return;
+  setDirty(false);
+  try { await api('/api/auth/logout', {}); } catch {}
+  signedOut();
+};
+
+// Сессия мерзімі өтсе немесе мұғалім тізімнен өшірілсе — кіру бетіне
+function handleAuthError(e) {
+  if (e.status === 401) { toast('Сессия аяқталды, қайта кіріңіз.', true); signedOut(); return true; }
+  return false;
+}
+
+(async function start() {
+  try {
+    const me = await api('/api/auth/me');
+    signedIn(me.email);
+    await reload();
+    show('topics');
+  } catch (e) {
+    if (e.status === 401) return signedOut();
+    document.body.insertAdjacentHTML('beforeend', '<div class="auth"><div class="box auth-box"><h1>Сервер қолжетімсіз</h1><p>Интернетті тексеріп, бетті жаңартыңыз.</p></div></div>');
+  }
+})();
 
 $$('.nav a[data-tab]').forEach(a => a.onclick = e => {
   e.preventDefault();
@@ -112,7 +112,7 @@ $$('.nav a[data-tab]').forEach(a => a.onclick = e => {
 
 // ---------- Тақырыптар тізімі ----------
 async function reload(keepId) {
-  try { topics = await loadTopics(); } catch (e) { return toast('Жүктеу қатесі: ' + e.message, true); }
+  try { topics = await loadTopics({ fallback: false }); } catch (e) { return toast('Сервер қолжетімсіз — мазмұнды жүктеу мүмкін болмады: ' + e.message, true); }
   current = topics.find(t => t.id === (keepId || current?.id)) || topics[0] || null;
   renderList();
   renderEditor();
@@ -141,15 +141,15 @@ $('#topic-list').onclick = async e => {
   if (j < 0 || j >= topics.length) return;
   [topics[i], topics[j]] = [topics[j], topics[i]];
   renderList();
-  const { error } = await sb.from('topics').upsert(topics.map(topicRow));
-  toast(error ? 'Қате: ' + error.message : 'Реті сақталды', !!error);
+  try { await api('/api/admin/topics/order', { ids: topics.map(t => t.id) }); toast('Реті сақталды'); }
+  catch (e) { if (!handleAuthError(e)) toast('Қате: ' + e.message, true); }
 };
 
 $('#add-topic').onclick = async () => {
   if (dirty && !confirm('Сақталмаған өзгерістер жоғалады. Жалғастырасыз ба?')) return;
-  const id = newId();
-  const { error } = await sb.from('topics').insert({ id, position: topics.length, title: 'Жаңа тақырып' });
-  if (error) return toast('Қате: ' + error.message, true);
+  let id;
+  try { ({ id } = await api('/api/admin/topics/create', {})); }
+  catch (e) { if (!handleAuthError(e)) toast('Қате: ' + e.message, true); return; }
   setDirty(false);
   await reload(id);
   $('#editor [name=title]')?.select();
@@ -172,32 +172,44 @@ function itemHead(label, i, kind) {
     <button type="button" class="ico del" data-act="del" data-kind="${kind}" data-i="${i}">✕</button></div>`;
 }
 
-function taskEditor(x, i) {
-  const choice = x.type === 'choice';
-  return `<div class="item" data-task="${i}">
-    ${itemHead('Тапсырма', i, 'tasks')}
-    <div class="g2">
-      <label>Атауы<input name="title" value="${esc(x.title)}" placeholder="Мысалы: Тайғақ жол"></label>
-      <label>Түрі<select name="type">
-        <option value="choice" ${choice ? 'selected' : ''}>Нұсқаны таңдау</option>
-        <option value="number" ${!choice ? 'selected' : ''}>Сан жауап</option>
+const fmtNum = n => Number.isFinite(n) ? String(n).replace('.', ',') : '';
+
+function questionEditor(q, i, k) {
+  const isText = q.kind === 'text';
+  return `<div class="q-item" data-q="${k}">
+    <div class="item-head"><span class="n">${k + 1}-сұрақ</span><span class="sp"></span>
+      <button type="button" class="ico del" data-act="q-del" data-i="${i}" data-k="${k}">✕</button></div>
+    <label>Сұрақ мәтіні<input name="qtext" value="${esc(q.text)}" placeholder="Мысалы: Велосипедшінің орташа жылдамдығын есепте."></label>
+    <div class="g4">
+      <label>Жауап түрі<select name="kind">
+        <option value="number" ${!isText ? 'selected' : ''}>Сан</option>
+        <option value="text" ${isText ? 'selected' : ''}>Сөз / бірлік</option>
       </select></label>
+      ${isText ? `
+      <label class="span2">Қабылданатын жауаптар <span class="hint">(үтір арқылы)</span><input name="accept" value="${esc((q.accept || []).join(', '))}" placeholder="м/с, метр/секунд"></label>` : `
+      <label>Дұрыс жауап<input name="answer" inputmode="decimal" value="${esc(fmtNum(q.answer))}" placeholder="5"></label>
+      <label>Бірлігі<input name="unit" value="${esc(q.unit || '')}" placeholder="м/с"></label>`}
+      <label>Балл<input name="points" inputmode="numeric" value="${esc(String(q.points ?? 1))}"></label>
     </div>
-    <label>Шарты<textarea name="text">${esc(x.text)}</textarea></label>
-    ${choice ? `
-      <div><div class="hint" style="margin-bottom:6px">Нұсқалар (дұрысын белгілеңіз):</div>
-      ${x.options.map((o, k) => `<div class="opt-row" style="margin-bottom:6px">
-        <input type="radio" name="answer-${i}" value="${k}" ${k === x.answer ? 'checked' : ''} title="Дұрыс жауап">
-        <input name="opt" value="${esc(o)}">
-        <button type="button" class="ico del" data-act="opt-del" data-i="${i}" data-k="${k}">✕</button></div>`).join('')}
-      <button type="button" class="add" data-act="opt-add" data-i="${i}">+ Нұсқа</button></div>` : `
-      <div class="g3">
-        <label>Дұрыс жауап<input name="answer" inputmode="decimal" value="${esc(String(x.answer).replace('.', ','))}"></label>
-        <label>Өлшем бірлігі<input name="unit" value="${esc(x.unit)}" placeholder="м/с"></label>
-        <label>Рұқсат етілген ауытқу<input name="tol" inputmode="decimal" value="${esc(String(x.tol).replace('.', ','))}"></label>
-      </div>`}
-    <label>Шешуі<textarea name="solution">${esc(x.solution)}</textarea></label>
+    ${isText ? '' : `<label>Рұқсат етілген ауытқу <span class="hint">(мысалы 0,1 — жауап 4,9…5,1 аралығында болса дұрыс)</span><input name="tol" inputmode="decimal" value="${esc(fmtNum(q.tol ?? 0))}"></label>`}
+  </div>`;
+}
+
+function taskEditor(x, i) {
+  const max = x.questions.reduce((a, q) => a + (Number(q.points) || 0), 0);
+  return `<div class="item" data-task="${i}">
+    ${itemHead('Есеп', i, 'tasks')}
+    <div class="g2">
+      <label>Атауы<input name="title" value="${esc(x.title)}" placeholder="Мысалы: Велосипедшінің қозғалысы"></label>
+      <label>Белгі <span class="hint">(мысалы: Механика)</span><input name="tag" value="${esc(x.tag || '')}"></label>
+    </div>
+    <label>Жағдаят (шарты)<textarea name="text">${esc(x.text)}</textarea></label>
     ${imgField('image', x.image)}
+    <div class="hint">Сұрақтар — барлығы ${max} балл. Сан жауаптарды сайт оқушының шешімінен өзі іздейді.</div>
+    ${x.questions.map((q, k) => questionEditor(q, i, k)).join('')}
+    <button type="button" class="add" data-act="q-add" data-i="${i}">+ Сұрақ</button>
+    <label>Эталон шешімі <span class="hint">(оқушы тексергеннен кейін көреді; ЖИ осыған сүйенеді)</span><textarea name="solution">${esc(x.solution)}</textarea></label>
+    <label>«Көмек алу» кеңестері <span class="hint">(әрқайсысы жаңа жолдан; біткен соң ЖИ көмектеседі)</span><textarea name="hints">${esc((x.hints || []).join('\n'))}</textarea></label>
   </div>`;
 }
 
@@ -239,12 +251,9 @@ function renderEditor() {
     </div>
 
     <div class="box">
-      <h2>Тапсырмалар</h2>
+      <h2>Жағдаяттық есептер</h2>
       ${t.tasks.map(taskEditor).join('')}
-      <div class="g2">
-        <button type="button" class="add" data-act="add-task" data-type="choice">+ Нұсқаны таңдау тапсырмасы</button>
-        <button type="button" class="add" data-act="add-task" data-type="number">+ Сан жауапты тапсырма</button>
-      </div>
+      <button type="button" class="add" data-act="add-task">+ Есеп қосу</button>
     </div>
 
     <div class="box">
@@ -288,21 +297,23 @@ function collect() {
   t.teacher = val('teacher');
   t.formulas = $$('[data-formula]', ed).map(r => [$('[name=f]', r).value.trim(), $('[name=d]', r).value.trim()]).filter(([f, d]) => f || d);
   t.sections = $$('[data-section]', ed).map((r, i) => ({ ...t.sections[i], title: $('[name=title]', r).value.trim(), theory: $('[name=theory]', r).value }));
-  t.tasks = $$('[data-task]', ed).map((r, i) => {
-    const x = { ...t.tasks[i], title: $('[name=title]', r).value.trim(), type: $('[name=type]', r).value, text: $('[name=text]', r).value.trim(), solution: $('[name=solution]', r).value.trim(), image: $('[name=image]', r).value || null };
-    if ($('[name=opt]', r) || x.type === 'choice') {
-      x.options = $$('[name=opt]', r).map(o => o.value);
-      const sel = $(`input[name="answer-${i}"]:checked`, r);
-      if (sel) x.answer = +sel.value;
-    }
-    if ($('[name=answer]', r)) {
-      const num = s => parseFloat(String(s).replace(/\s/g, '').replace(',', '.'));
-      x.answer = num($('[name=answer]', r).value);
-      x.unit = $('[name=unit]', r).value.trim();
-      x.tol = num($('[name=tol]', r).value) || 0;
-    }
-    return x;
-  });
+  const num = v => parseFloat(String(v).replace(/\s/g, '').replace(',', '.'));
+  t.tasks = $$('[data-task]', ed).map((r, i) => ({
+    ...t.tasks[i],
+    title: $('[name=title]', r).value.trim(),
+    tag: $('[name=tag]', r).value.trim(),
+    text: $('[name=text]', r).value.trim(),
+    image: $('[name=image]', r).value || null,
+    solution: $('[name=solution]', r).value.trim(),
+    hints: lines($('[name=hints]', r).value),
+    questions: $$('[data-q]', r).map(qr => {
+      const kind = $('[name=kind]', qr).value;
+      const q = { kind, text: $('[name=qtext]', qr).value.trim(), points: num($('[name=points]', qr).value) };
+      if (kind === 'text') q.accept = $('[name=accept]', qr).value.split(',').map(a => a.trim()).filter(Boolean);
+      else Object.assign(q, { answer: num($('[name=answer]', qr).value), unit: $('[name=unit]', qr).value.trim(), tol: num($('[name=tol]', qr).value) || 0 });
+      return q;
+    }),
+  }));
 }
 
 function rerender() { collect(); renderEditor(); setDirty(true); }
@@ -311,13 +322,7 @@ $('#editor').addEventListener('input', () => setDirty(true));
 
 $('#editor').addEventListener('change', async e => {
   const el = e.target;
-  if (el.name === 'type') {
-    collect();
-    const x = current.tasks[+el.closest('[data-task]').dataset.task];
-    if (x.type === 'choice' && !x.options.length) { x.options = ['', '']; x.answer = 0; }
-    renderEditor(); setDirty(true);
-    return;
-  }
+  if (el.name === 'kind') { rerender(); return; }
   if (el.type !== 'file' || !el.files[0]) return;
   const url = await uploadImage(el.files[0]);
   el.value = '';
@@ -357,18 +362,13 @@ $('#editor').addEventListener('click', async e => {
     case 'add-section': t.sections.push({ title: '', theory: '' }); break;
     case 'add-formula': t.formulas.push(['', '']); break;
     case 'add-task':
-      t.tasks.push(b.dataset.type === 'choice'
-        ? { title: '', type: 'choice', text: '', options: ['', '', '', ''], answer: 0, unit: '', tol: 0, solution: '', image: null }
-        : { title: '', type: 'number', text: '', options: [], answer: 0, unit: '', tol: 0, solution: '', image: null });
+      t.tasks.push({ title: '', tag: '', text: '', image: null, solution: '', hints: [],
+        questions: [{ kind: 'number', text: '', answer: NaN, unit: '', tol: 0, points: 2 }] });
       break;
-    case 'opt-add': t.tasks[i].options.push(''); break;
-    case 'opt-del': {
-      const x = t.tasks[i], k = +b.dataset.k;
-      x.options.splice(k, 1);
-      if (x.answer >= x.options.length) x.answer = Math.max(0, x.options.length - 1);
-      else if (x.answer > k) x.answer--;
-      break;
-    }
+    case 'q-add': t.tasks[i].questions.push({ kind: 'number', text: '', answer: NaN, unit: '', tol: 0, points: 1 }); break;
+    case 'q-del':
+      if (!confirm('Сұрақты жоясыз ба?')) return;
+      t.tasks[i].questions.splice(+b.dataset.k, 1); break;
     case 'img-remove': $('input[type=hidden]', b.closest('[data-img]')).value = ''; collect(); break;
   }
   renderEditor();
@@ -376,26 +376,34 @@ $('#editor').addEventListener('click', async e => {
 });
 
 // ---------- Сақтау ----------
-// Жазу тек POST (upsert) арқылы: кейбір антивирустар мен кеңейтімдер браузерде PATCH сұраныстарын бұғаттайды
-function topicRow(t) {
-  return {
-    id: t.id, position: topics.indexOf(t), title: t.title, short: t.short, icon: t.icon, color: t.color,
-    problem_title: t.problem.title, problem_text: t.problem.text, problem_questions: t.problem.questions, problem_image: t.problem.image,
-    formulas: t.formulas, ai: t.ai, teacher: t.teacher, updated_at: new Date().toISOString(),
-  };
-}
-
 function validate(t) {
   for (const [i, x] of t.tasks.entries()) {
-    const n = `${i + 1}-тапсырма`;
-    if (!x.text) return `${n}: шартын жазыңыз.`;
-    if (x.type === 'choice') {
-      if (x.options.filter(o => o.trim()).length < 2) return `${n}: кемінде 2 нұсқа керек.`;
-      if (x.options.some(o => !o.trim())) return `${n}: бос нұсқаларды толтырыңыз немесе өшіріңіз.`;
-    } else if (!Number.isFinite(x.answer)) return `${n}: дұрыс жауапты сан түрінде жазыңыз (мысалы 2,5).`;
+    const n = `${i + 1}-есеп`;
+    if (!x.title) return `${n}: атауын жазыңыз.`;
+    if (!x.text) return `${n}: жағдаятты жазыңыз.`;
+    if (!x.questions.length) return `${n}: кемінде бір сұрақ қосыңыз.`;
+    for (const [k, q] of x.questions.entries()) {
+      const m = `${n}, ${k + 1}-сұрақ`;
+      if (!q.text) return `${m}: сұрақ мәтінін жазыңыз.`;
+      if (!(q.points > 0)) return `${m}: балл 0-ден көп болуы керек.`;
+      if (q.kind === 'text' && !q.accept.length) return `${m}: кемінде бір қабылданатын жауап жазыңыз.`;
+      if (q.kind === 'number' && !Number.isFinite(q.answer)) return `${m}: дұрыс жауапты сан түрінде жазыңыз (мысалы 2,5).`;
+    }
   }
   if (t.sections.some(s => !s.title)) return 'Бөлімдердің атауларын толтырыңыз.';
   return null;
+}
+
+// Жауап шартта бұрыннан жазылған санмен сәйкес келсе, оқушы шартты көшіріп-ақ балл алады
+function leaks(t) {
+  const out = [];
+  t.tasks.forEach((x, i) => {
+    const given = extractNumbers(x.text + ' ' + x.questions.map(q => q.text).join(' '));
+    x.questions.forEach((q, k) => {
+      if (q.kind === 'number' && given.some(g => Math.abs(g - q.answer) <= q.tol + 1e-9)) out.push(`${i + 1}-есеп, ${k + 1}-сұрақ`);
+    });
+  });
+  return out;
 }
 
 async function save() {
@@ -408,29 +416,15 @@ async function save() {
   try {
     t.sections.forEach(s => s.id ||= crypto.randomUUID());
     t.tasks.forEach(x => x.id ||= newId());
-    const must = r => { if (r.error) throw r.error; return r; };
-    must(await sb.from('topics').upsert(topicRow(t)));
-
-    const inList = ids => `(${ids.map(id => `"${id}"`).join(',')})`;
-    let del = sb.from('sections').delete().eq('topic_id', t.id);
-    if (t.sections.length) del = del.not('id', 'in', inList(t.sections.map(s => s.id)));
-    must(await del);
-    if (t.sections.length) must(await sb.from('sections').upsert(t.sections.map((s, i) => ({ id: s.id, topic_id: t.id, position: i, title: s.title, theory: s.theory }))));
-
-    del = sb.from('tasks').delete().eq('topic_id', t.id);
-    if (t.tasks.length) del = del.not('id', 'in', inList(t.tasks.map(x => x.id)));
-    must(await del);
-    if (t.tasks.length) must(await sb.from('tasks').upsert(t.tasks.map((x, i) => ({
-      id: x.id, topic_id: t.id, position: i, title: x.title, type: x.type, text: x.text,
-      options: x.type === 'choice' ? x.options : [], answer: x.answer, unit: x.type === 'number' ? x.unit : '',
-      tol: x.type === 'number' ? x.tol : 0, solution: x.solution, image: x.image,
-    }))));
+    await api('/api/admin/topics/save', { topic: t });
 
     setDirty(false);
     renderList();
-    toast('Сақталды ✓');
+    const warn = leaks(t);
+    if (warn.length) toast(`Сақталды. Назар аударыңыз: ${warn.join('; ')} — жауабы шартта жазылған санмен бірдей, оқушы оны көшіріп балл алуы мүмкін.`, true);
+    else toast('Сақталды ✓');
   } catch (e) {
-    toast('Сақтау қатесі: ' + e.message, true);
+    if (!handleAuthError(e)) toast('Сақтау қатесі: ' + e.message, true);
   } finally {
     btn.disabled = false; btn.textContent = 'Сақтау';
   }
@@ -438,11 +432,9 @@ async function save() {
 
 async function deleteTopic() {
   if (!confirm(`«${current.title}» тақырыбын барлық тапсырмаларымен бірге жоясыз ба? Бұл әрекетті қайтару мүмкін емес.`)) return;
-  const { error } = await sb.from('topics').delete().eq('id', current.id);
-  if (error) return toast('Қате: ' + error.message, true);
-  // Тақырыптың суреттерін де өшіреміз
-  const { data: files } = await sb.storage.from('images').list(current.id, { limit: 1000 });
-  if (files?.length) await sb.storage.from('images').remove(files.map(f => `${current.id}/${f.name}`));
+  // Сервер тақырыптың бөлімдерін, есептерін және суреттерін бірге өшіреді
+  try { await api('/api/admin/topics/delete', { id: current.id }); }
+  catch (e) { if (!handleAuthError(e)) toast('Қате: ' + e.message, true); return; }
   setDirty(false);
   current = null;
   toast('Тақырып жойылды');
@@ -469,36 +461,69 @@ async function uploadImage(file) {
   if (file.size > 20_000_000) { toast('Файл тым үлкен (20 МБ-тан аспауы керек)', true); return null; }
   toast('Сурет жүктелуде...');
   const blob = await shrink(file);
-  const ext = blob.type === 'image/jpeg' ? 'jpg' : (file.name.split('.').pop() || 'img').toLowerCase();
-  const path = `${current.id}/${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
-  const { error } = await sb.storage.from('images').upload(path, blob, { contentType: blob.type || file.type });
-  if (error) { toast('Жүктеу қатесі: ' + error.message, true); return null; }
+  const res = await fetch(`/api/admin/images?topic=${encodeURIComponent(current.id)}`, {
+    method: 'POST', credentials: 'same-origin', headers: { 'content-type': blob.type || file.type }, body: blob,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    if (res.status === 401) { handleAuthError({ status: 401 }); return null; }
+    toast('Жүктеу қатесі: ' + (data.message || res.status), true);
+    return null;
+  }
   toast('Сурет жүктелді — «Сақтау» батырмасын басуды ұмытпаңыз');
-  return sb.storage.from('images').getPublicUrl(path).data.publicUrl;
+  return data.url;
 }
+
 
 // ---------- Мұғалімдер ----------
 async function loadTeachers() {
-  const { data, error } = await sb.from('teacher_emails').select('*').order('added_at');
-  if (error) return toast('Қате: ' + error.message, true);
-  $('#teacher-list').innerHTML = data.map(r => `<li><span>${esc(r.email)}${r.email === userEmail ? ' <span class="hint">(сіз)</span>' : ''}</span>
-    ${r.email === userEmail ? '' : `<button class="ico del" data-email="${esc(r.email)}">✕ Өшіру</button>`}</li>`).join('');
+  let data;
+  try { data = await api('/api/admin/teachers'); }
+  catch (e) { if (!handleAuthError(e)) toast('Қате: ' + e.message, true); return; }
+  $('#teacher-list').innerHTML = data.teachers.map(r => {
+    const self = r.email === userEmail;
+    const status = r.active ? '' : r.invited ? 'код берілді, әлі кірмеген' : 'код мерзімі өткен';
+    return `<li><span>${esc(r.email)}${self ? ' <span class="hint">(сіз)</span>' : ''}${status ? `<span class="status">${status}</span>` : ''}</span>
+      ${self ? '' : `<span class="acts">
+        <button class="ico" data-invite="${esc(r.email)}" title="Құпиясөзді ұмытса — жаңа код">🔑 Жаңа код</button>
+        <button class="ico del" data-remove="${esc(r.email)}">✕ Өшіру</button></span>`}</li>`;
+  }).join('');
+}
+
+function showInvite({ email, code }) {
+  const box = $('#invite-result');
+  box.hidden = false;
+  box.innerHTML = `<b>${esc(email)}</b> үшін шақыру коды:<div class="code">${esc(code)}</div>
+    <span class="hint">Оны мұғалімге беріңіз: ол кіру бетінде «Шақыру кодым бар» арқылы өз құпиясөзін қояды. Код 7 күн жарамды және тек бір рет көрсетіледі.</span>`;
 }
 
 $('#teacher-form').onsubmit = async e => {
   e.preventDefault();
   const email = e.target.email.value.trim().toLowerCase();
-  const { error } = await sb.from('teacher_emails').insert({ email });
-  if (error) return toast(error.code === '23505' ? 'Бұл email тізімде бар' : 'Қате: ' + error.message, true);
-  e.target.reset();
-  toast('Қосылды. Енді ол «Тіркелу» арқылы тіркеле алады.');
-  loadTeachers();
+  if ($$('#teacher-list [data-invite]').some(b => b.dataset.invite === email) || email === userEmail) {
+    return toast('Бұл email тізімде бар. Құпиясөзін ұмытса, «Жаңа код» батырмасын басыңыз.', true);
+  }
+  try { showInvite(await api('/api/admin/teachers/invite', { email })); e.target.reset(); loadTeachers(); }
+  catch (err) { if (!handleAuthError(err)) toast(err.message, true); }
 };
 
 $('#teacher-list').onclick = async e => {
-  const b = e.target.closest('[data-email]');
-  if (!b || !confirm(`${b.dataset.email} мұғалімдер тізімінен өшірілсін бе?`)) return;
-  const { error } = await sb.from('teacher_emails').delete().eq('email', b.dataset.email);
-  if (error) return toast('Қате: ' + error.message, true);
-  loadTeachers();
+  const inv = e.target.closest('[data-invite]'), rm = e.target.closest('[data-remove]');
+  try {
+    if (inv && confirm(`${inv.dataset.invite} үшін жаңа шақыру коды жасалсын ба? (Құпиясөзін ұмытқан жағдайда)`)) {
+      showInvite(await api('/api/admin/teachers/invite', { email: inv.dataset.invite }));
+      loadTeachers();
+    }
+    if (rm && confirm(`${rm.dataset.remove} мұғалімдер тізімінен өшірілсін бе?`)) {
+      await api('/api/admin/teachers/remove', { email: rm.dataset.remove });
+      loadTeachers();
+    }
+  } catch (err) { if (!handleAuthError(err)) toast(err.message, true); }
+};
+
+$('#password-form').onsubmit = async e => {
+  e.preventDefault();
+  const f = e.target;
+  try { await api('/api/auth/password', { current: f.current.value, password: f.password.value }); f.reset(); toast('Құпиясөз өзгертілді ✓'); }
+  catch (err) { if (!handleAuthError(err)) toast(err.message, true); }
 };

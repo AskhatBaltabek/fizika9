@@ -29,32 +29,27 @@
   <form class="box auth-box" id="login-form">
     <h1>Мұғалім кабинеті</h1>
     <p class="muted">Тақырыптар мен тапсырмаларды өңдеу үшін кіріңіз.</p>
-    <label>Email<input name="email" type="email" required autocomplete="email"></label>
-    <label>Құпиясөз<input name="password" type="password" minlength="6" required autocomplete="current-password"></label>
+    <label>Email<input name="email" type="email" required autocomplete="username"></label>
+    <label>Құпиясөз<input name="password" type="password" required autocomplete="current-password"></label>
     <button class="btn btn-primary" type="submit">Кіру</button>
-    <div class="auth-links">
-      <a href="#" id="signup">Тіркелу</a> · <a href="#" id="forgot">Құпиясөзді ұмыттым</a>
-    </div>
+    <div class="auth-links"><a href="#" id="to-invite">Шақыру кодым бар / құпиясөзді ұмыттым</a></div>
     <div class="msg" id="login-msg"></div>
   </form>
 </section>
 
-<!-- Жаңа құпиясөз -->
-<section id="v-reset" class="auth" hidden>
-  <form class="box auth-box" id="reset-form">
-    <h1>Жаңа құпиясөз</h1>
-    <label>Құпиясөз<input name="password" type="password" minlength="6" required autocomplete="new-password"></label>
-    <button class="btn btn-primary" type="submit">Сақтау</button>
-    <div class="msg" id="reset-msg"></div>
+<!-- Шақыру коды: алғашқы кіру немесе құпиясөзді қалпына келтіру -->
+<section id="v-invite" class="auth" hidden>
+  <form class="box auth-box" id="invite-form">
+    <h1>Құпиясөз орнату</h1>
+    <p class="muted">Шақыру кодын әріптесіңізден алыңыз: «Мұғалімдер» бөлімінде ол сізге код жасай алады. Құпиясөзді ұмытсаңыз да, осылай жаңа код аласыз.</p>
+    <label>Email<input name="email" type="email" required autocomplete="username"></label>
+    <label>Шақыру коды<input name="code" required placeholder="XXXX-XXXX" autocomplete="one-time-code" style="text-transform:uppercase"></label>
+    <label>Жаңа құпиясөз <span class="hint">(кемінде 8 таңба)</span><input name="password" type="password" minlength="8" required autocomplete="new-password"></label>
+    <label>Құпиясөзді қайталаңыз<input name="password2" type="password" minlength="8" required autocomplete="new-password"></label>
+    <button class="btn btn-primary" type="submit">Сақтау және кіру</button>
+    <div class="auth-links"><a href="#" id="to-login">← Кіру бетіне оралу</a></div>
+    <div class="msg" id="invite-msg"></div>
   </form>
-</section>
-
-<!-- Рұқсат жоқ -->
-<section id="v-denied" class="auth" hidden>
-  <div class="box auth-box">
-    <h1>Рұқсат жоқ</h1>
-    <p>Сіздің email (<b id="denied-email"></b>) мұғалімдер тізімінде жоқ. Әріптесіңізден «Мұғалімдер» бөлімінде сізді қосуын сұраңыз, содан кейін бетті жаңартыңыз.</p>
-  </div>
 </section>
 
 <!-- Тақырыптар -->
@@ -70,20 +65,29 @@
 <section id="v-teachers" class="wrap ad-teachers" hidden>
   <div class="box">
     <h2>Мұғалімдер</h2>
-    <p class="muted">Тізімдегі email-мен тіркелген кез келген адам мазмұнды өңдей алады. Жаңа мұғалім алдымен осында қосылады, кейін өзі «Тіркелу» арқылы тіркеледі.</p>
+    <p class="muted">Жаңа мұғалімді қосқанда шақыру коды шығады. Оны әріптесіңізге беріңіз: ол «Шақыру кодым бар» арқылы өз құпиясөзін қояды. Код 7 күн жарамды. Құпиясөзін ұмытқан мұғалімге «Жаңа код» батырмасы арқылы код жасаңыз.</p>
     <form id="teacher-form" class="row">
       <input name="email" type="email" placeholder="email@mektep.kz" required>
       <button class="btn btn-primary" type="submit">Қосу</button>
     </form>
+    <div id="invite-result" class="invite-result" hidden></div>
     <ul id="teacher-list" class="teacher-list"></ul>
   </div>
+  <form class="box" id="password-form" style="margin-top:20px">
+    <h2>Құпиясөзімді өзгерту</h2>
+    <div class="g2">
+      <label>Қазіргі құпиясөз<input name="current" type="password" required autocomplete="current-password"></label>
+      <label>Жаңа құпиясөз <span class="hint">(кемінде 8 таңба)</span><input name="password" type="password" minlength="8" required autocomplete="new-password"></label>
+    </div>
+    <button class="btn btn-primary" type="submit" style="justify-self:start">Өзгерту</button>
+  </form>
 </section>
 
 <div id="toast" class="toast" hidden></div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-<script src="js/config.js"></script>
 <script src="js/data.js"></script>
+<script src="js/grade.js"></script>
+<script src="js/cases.js"></script>
 <script src="js/api.js"></script>
 <script src="js/admin.js"></script>
 </body>

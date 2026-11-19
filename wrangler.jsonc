@@ -1,9 +1,24 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "fizika9",
+  "main": "worker/index.js",
   "compatibility_date": "2026-10-19",
-  // Тек dist/ жарияланады — оны deploy.sh жинайды
+  // Сайт файлдары dist/ ішінен (оны deploy.sh жинайды); /api/* және /img/* сұраныстарын Worker өңдейді
   "assets": {
-    "directory": "./dist"
-  }
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*", "/img/*"]
+  },
+  // Мазмұн мен мұғалімдер — D1 (SQLite), суреттер — KV
+  "d1_databases": [
+    { "binding": "DB", "database_name": "fizika9", "database_id": "43ff5c5e-1d20-4710-a79c-1262c3dc5617" }
+  ],
+  "kv_namespaces": [
+    { "binding": "IMAGES", "id": "1d0bafc2c2de472c9ff3307b852fd127" }
+  ],
+  "ai": { "binding": "AI" },
+  "vars": {
+    "AI_MODEL": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  "observability": { "enabled": true }
 }

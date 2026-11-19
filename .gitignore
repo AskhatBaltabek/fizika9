@@ -1,10 +1,5 @@
-supabase/setup.sql
 dist/
-
-# wrangler files
-.wrangler
-.dev.vars*
-!.dev.vars.example
-.env*
-!.env.example
 .wrangler/
+.dev.vars*
+.env*
+d1/seed.sql

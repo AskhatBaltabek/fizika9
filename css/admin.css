@@ -91,3 +91,11 @@
   .savebar .btn { flex: 1; padding: 10px 8px; font-size: 13px; }
   .admin .nav, .ad-side ol { scrollbar-width: none; }
 }
+.q-item { border: 1.5px dashed var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 8px; background: #fff; }
+.g4 { display: grid; grid-template-columns: 1.1fr 1fr 1fr .6fr; gap: 10px; }
+.g4 .span2 { grid-column: span 2; }
+@media (max-width: 860px) { .g4 { grid-template-columns: 1fr 1fr; } }
+.invite-result { background: var(--teal-soft); border: 1.5px solid #9fdcd6; border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
+.invite-result .code { font: 800 26px/1.2 ui-monospace, Consolas, monospace; letter-spacing: 2px; color: var(--navy); margin: 6px 0; user-select: all; }
+.teacher-list .status { font-size: 12px; color: var(--muted); margin-left: 8px; }
+.teacher-list .acts { display: flex; gap: 6px; }

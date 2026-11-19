@@ -1,15 +1,26 @@
 # Білім Айна — 9-сынып физикасы
 
-Мұғалім мен оқушыларға арналған сайт: 8 бөлім, проблемалық жағдаяттар, тапсырмалар, теория, ЖИ-мен зерттеу.
+Мұғалім мен оқушыларға арналған сайт: 8 бөлім, проблемалық жағдаяттар, теория, жағдаяттық есептер (балл кодпен, түсініктеме ЖИ-мен).
 
-- Сайт: статикалық HTML/CSS/JS, Cloudflare (`sh deploy.sh`) — https://fizika9.i-b-aseke.workers.dev
-- Мазмұн: Supabase (Postgres + Auth + Storage)
-- Мұғалім кабинеті: `admin.html`
+Бәрі бір Cloudflare аккаунтында, тегін: https://fizika9.i-b-aseke.workers.dev
 
-## Баптау
-1. Supabase-та жоба құрыңыз.
-2. `node supabase/build-seed.js <мұғалім-email>` → `supabase/setup.sql` пайда болады. Оны Supabase SQL Editor-да іске қосыңыз.
-3. `js/config.js` ішіне Project URL және anon key жазыңыз.
-4. Supabase → Authentication → URL Configuration → Site URL: сайттың адресі.
+- Сайт: статикалық HTML/CSS/JS (`dist/` → Workers static assets)
+- Сервер: `worker/` — мазмұн API, мұғалімдердің кіруі (шақыру коды + құпиясөз), админка API, ЖИ-тексеру
+- Мазмұн мен мұғалімдер: Cloudflare D1 (SQLite) — `d1/schema.sql`
+- Суреттер: Workers KV
+- ЖИ: Workers AI (`AI_MODEL` — `wrangler.jsonc`)
+- Мұғалім кабинеті: `/admin`
 
-`js/config.js` бос болса, сайт `js/data.js` ішіндегі мазмұнмен жұмыс істейді.
+## Жариялау
+```sh
+sh deploy.sh
+```
+
+## Жаңа базаны баптау
+```sh
+npx wrangler d1 execute fizika9 --remote --file d1/schema.sql
+node d1/build-seed.js && npx wrangler d1 execute fizika9 --remote --file d1/seed.sql
+```
+Алғашқы мұғалімге шақыру кодын `teachers` кестесіне `invite_hash` (кодтың SHA-256, сызықшасыз, бас әріппен) ретінде жазыңыз; қалғандарын ол кабинеттен қосады.
+
+Сервер жауап бермесе, сайт `js/data.js` + `js/cases.js` ішіндегі кірістірілген мазмұнды көрсетеді.
