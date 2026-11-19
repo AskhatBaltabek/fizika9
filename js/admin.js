@@ -261,14 +261,6 @@ function renderEditor() {
     </div>
 
     <div class="box">
-      <h2>1 кезең: Проблемалық жағдаят</h2>
-      <label>Тақырыбы<input name="problem_title" value="${esc(t.problem.title)}"></label>
-      <label>Мәтіні<textarea name="problem_text">${esc(t.problem.text)}</textarea></label>
-      <label>Талқылауға сұрақтар <span class="hint">(әр сұрақ жаңа жолдан)</span><textarea name="problem_questions">${esc(t.problem.questions.join('\n'))}</textarea></label>
-      ${imgField('problem_image', t.problem.image)}
-    </div>
-
-    <div class="box">
       <h2>Бөлім тақырыптары және теория</h2>
       <div class="hint">Теорияны жазу: **қалың**, *көлбеу*, «- » тізім, «## » тақырыпша. Теориясы бар бөлімдер сайтта «Теория» кезеңінде шығады.</div>
       ${t.sections.map((s, i) => `<div class="item" data-section="${i}">
@@ -284,14 +276,6 @@ function renderEditor() {
       <h2>Тапсырмалар</h2>
       ${t.tasks.map(taskEditor).join('')}
       <button type="button" class="add" data-act="add-task">+ Тапсырма қосу</button>
-    </div>
-
-    <div class="box">
-      <h2>Негізгі формулалар</h2>
-      ${t.formulas.map(([f, d], i) => `<div class="f-row" data-formula="${i}">
-        <input name="f" value="${esc(f)}" placeholder="F = ma"><input name="d" value="${esc(d)}" placeholder="Ньютонның екінші заңы">
-        <button type="button" class="ico del" data-act="del" data-kind="formulas" data-i="${i}">✕</button></div>`).join('')}
-      <button type="button" class="add" data-act="add-formula">+ Формула</button>
     </div>
 
     <div class="box">
@@ -322,10 +306,11 @@ function collect() {
   t.short = val('short');
   t.icon = val('icon');
   t.color = val('color');
-  t.problem = { title: val('problem_title'), text: val('problem_text'), questions: lines(val('problem_questions')), image: val('problem_image') || null };
+  // «Проблемалық жағдаят» мен формулалар сайтта көрсетілмейді — редакторда жоқ болса, бұрынғы мәндері сақталады
+  if (top('problem_title')) t.problem = { title: val('problem_title'), text: val('problem_text'), questions: lines(val('problem_questions')), image: val('problem_image') || null };
   t.ai = lines(val('ai'));
   t.teacher = val('teacher');
-  t.formulas = $$('[data-formula]', ed).map(r => [$('[name=f]', r).value.trim(), $('[name=d]', r).value.trim()]).filter(([f, d]) => f || d);
+  if ($('[data-act=add-formula]', ed)) t.formulas = $$('[data-formula]', ed).map(r => [$('[name=f]', r).value.trim(), $('[name=d]', r).value.trim()]).filter(([f, d]) => f || d);
   t.sections = $$('[data-section]', ed).map((r, i) => ({ ...t.sections[i], title: $('[name=title]', r).value.trim(), theory: $('[name=theory]', r).value }));
   t.goal = val('goal');
   const num = v => parseFloat(String(v).replace(/\s/g, '').replace(',', '.'));

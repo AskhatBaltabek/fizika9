@@ -231,11 +231,18 @@ function bindTasks(root, tasks) {
     });
 
     const finish = grade => {
+      if (scores[task.id] == null || grade.score >= scores[task.id]) {
+        // Ең жақсы әрекеттің бөліктер бойынша балдары — бөлімнің қорытынды нәтижесі үшін
+        const res = store.get('f9-res', {});
+        res[task.id] = grade.results.map(r => r.points);
+        store.set('f9-res', res);
+      }
       if (scores[task.id] == null || grade.score > scores[task.id]) {
         scores[task.id] = grade.score; store.set('f9-scores', scores);
         el.querySelector('.case-top .max').innerHTML = `<b class="${grade.score === grade.max ? 'ok' : ''}">Ең жақсы: ${fmt(grade.score)}</b> · ${grade.max} балл`;
       }
       if (grade.score === grade.max) markDone(task.id);
+      document.dispatchEvent(new CustomEvent('task-scored'));
     };
 
     el.querySelector('.check').onclick = async () => {
@@ -302,73 +309,126 @@ function renderHome() {
   }).join('');
 }
 
-// ---------- Тақырып беті ----------
+// ---------- Тақырып беті: шолу → тапсырмалар (әрқайсысы жеке) → қорытынды нәтиже ----------
+const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
+const SKILLS = [
+  { title: 'Тест және сәйкестендіру', kinds: ['choice', 'match', 'tf'], cls: 'c1' },
+  { title: 'Есептеу дағдысы', kinds: ['calc'], cls: 'c2' },
+  { title: 'Логикалық дәлелдеу', kinds: ['open'], cls: 'c3' },
+];
+const rating = p => p >= 85 ? 'Өте жақсы нәтиже' : p >= 70 ? 'Жақсы нәтиже' : p >= 50 ? 'Қанағаттанарлық нәтиже' : 'Тақырыпты қайталау керек';
+const pct = (a, b) => b ? Math.round(a / b * 1000) / 10 : 0;
+
 function renderTopic() {
   const id = new URLSearchParams(location.search).get('t');
   const t = topicById(id) || DATA[0];
   if (!t) return;
   const i = DATA.indexOf(t);
+  const next = DATA[i + 1];
+  const content = document.getElementById('content');
+  content.classList.add('single');
   document.title = `${t.title} — Физика 9`;
 
-  document.getElementById('side').innerHTML = `
-    <a class="back" href="index.html">‹ ФИЗИКА 9</a>
-    <ol>${DATA.map(x => `<li><a href="topic.html?t=${x.id}" class="${x === t ? 'active' : ''}">${esc(x.title)}</a></li>`).join('')}</ol>`;
+  const view = () => {
+    const h = location.hash.slice(1);
+    if (h === 'result') return 'result';
+    const k = /^task-(\d+)$/.exec(h);
+    return k && t.tasks[+k[1] - 1] ? +k[1] : 'overview';
+  };
 
-  const prev = DATA[i - 1], next = DATA[i + 1];
-  const theory = t.sections.filter(s => s.theory.trim());
-  document.getElementById('content').innerHTML = `
-    <div>
-      <h1>${esc(t.title)}</h1>
-      <p class="lead">${i + 1}-бөлім · ${esc(t.short)}</p>
-      ${t.goal ? `<p class="goal"><b>Сабақ мақсаты:</b> ${esc(t.goal)}</p>` : ''}
+  const status = x => {
+    const s = scores[x.id], max = maxOf(x);
+    if (s == null) return '';
+    return s === max ? '<span class="st ok">✓</span>' : `<span class="st">${fmt(s)}/${max}</span>`;
+  };
 
-      <div class="stage"><span class="b">1 кезең</span> Проблемалық жағдаят</div>
-      <div class="box problem">
-        <div class="pic" style="background:${t.color}22">${t.problem.image ? `<img src="${esc(t.problem.image)}" alt="">` : (ICONS[t.icon] || '')}</div>
-        <div>
-          <h3>${esc(t.problem.title)}</h3>
-          <p>${esc(t.problem.text)}</p>
-          <ul>${t.problem.questions.map(q => `<li>${esc(q)}</li>`).join('')}</ul>
-        </div>
+  function renderSide() {
+    const v = view();
+    document.getElementById('side').innerHTML = `
+      <a class="back" href="index.html" title="Барлық тақырыптар">← ФИЗИКА 9</a>
+      <div class="side-title">${ROMAN[i] || i + 1} бөлім. ${esc(t.title)}</div>
+      <ul class="steps-nav">
+        <li><a href="#overview" class="${v === 'overview' ? 'active' : ''}"><span class="ic">ⓘ</span> Сабаққа шолу</a></li>
+        ${t.tasks.map((x, k) => `<li><a href="#task-${k + 1}" class="${v === k + 1 ? 'active' : ''}"><span class="ic">✎</span> ${k + 1}-тапсырма ${status(x)}</a></li>`).join('')}
+        <li><a href="#result" class="${v === 'result' ? 'active' : ''}"><span class="ic">◎</span> Қорытынды нәтиже</a></li>
+      </ul>`;
+    document.querySelector('.steps-nav a.active')?.scrollIntoView({ block: 'nearest', inline: 'center' });
+  }
+
+  const navBtns = (back, fwd) => `<div class="step-nav">
+    ${back ? `<a class="btn btn-ghost" href="#${back}">← Артқа</a>` : '<span></span>'}
+    ${fwd ? `<a class="btn btn-primary" href="#${fwd}">Алға →</a>` : ''}</div>`;
+
+  function overviewHTML() {
+    const total = t.tasks.reduce((a, x) => a + maxOf(x), 0);
+    const theory = t.sections.filter(s => s.theory.trim());
+    return `
+      <h1>Сабаққа шолу</h1>
+      <p class="lead">${ROMAN[i] || i + 1} бөлім. ${esc(t.title)}</p>
+      ${t.goal ? `<div class="box ov-block"><h3>Сабақ мақсаты</h3><p>${esc(t.goal)}</p></div>` : ''}
+      ${t.sections.length ? `<div class="box ov-block"><h3>Бөлім тақырыптары</h3><ul>${t.sections.map(s => `<li>${esc(s.title)}</li>`).join('')}</ul></div>` : ''}
+      ${theory.length ? `<div class="theory">${theory.map(s => `<details class="box"><summary>${esc(s.title)}</summary><div class="md">${md(s.theory)}</div></details>`).join('')}</div>` : ''}
+      <div class="box ov-block"><h3>Тапсырмалар</h3><p>${t.tasks.length} контекстік тапсырма, барлығы ${total} балл. Әр тапсырмада жағдаят, есеп және логикалық дәлелдеу бар; жауабыңды «Жауапты тексеру» батырмасымен бірден тексере аласың.</p></div>
+      ${t.ai.length ? `<div class="ai-card"><h3>🤖 ЖИ-мен зерттеу</h3><ul>${t.ai.map(a => `<li>${esc(a)}</li>`).join('')}</ul>
+        <div class="warn">ЖИ қателесуі мүмкін — әр жауапты формуламен немесе оқулықпен тексер.</div></div>` : ''}
+      ${t.teacher ? `<div class="side-card teacher-card teacher-only"><h3>👩‍🏫 Мұғалімге кеңес</h3><p style="margin:0;font-size:14px">${esc(t.teacher)}</p></div>` : ''}
+      ${navBtns(null, t.tasks.length ? 'task-1' : 'result')}`;
+  }
+
+  function resultHTML() {
+    const res = store.get('f9-res', {});
+    const card = (title, got, max, extra, cls) => `<div class="res-card ${cls}">
+      <div class="rc-title">${title}</div><div class="rc-score">${fmt(got)} / ${max}${cls === 'total' ? ' балл' : ''}</div>
+      <div class="rc-pct">${pct(got, max)}% орындалды</div><div class="rc-extra">${extra}</div></div>`;
+    let gotAll = 0, maxAll = 0;
+    const cards = SKILLS.map(sk => {
+      let got = 0, max = 0, n = 0;
+      t.tasks.forEach(x => x.parts.forEach((p, k) => {
+        if (!sk.kinds.includes(p.kind)) return;
+        max += Number(p.points) || 0; n++;
+        got += Number(res[x.id]?.[k]) || 0;
+      }));
+      gotAll += got; maxAll += max;
+      return max ? card(sk.title, got, max, `${n} бөлік`, sk.cls) : '';
+    }).join('');
+    const doneN = t.tasks.filter(x => scores[x.id] != null).length;
+    const p = pct(gotAll, maxAll);
+    return `
+      <div class="res-head">
+        <div class="res-icon">🎯</div>
+        <h1>${ROMAN[i] || i + 1} бөлім. ${esc(t.title)} — Қорытынды нәтиже</h1>
+        <p class="lead">Осы бөлімдегі контекстік тапсырмалар бойынша жетістігің · орындалған тапсырмалар: ${doneN} / ${t.tasks.length}</p>
       </div>
+      <div class="res-cards">${cards}${card('Тарау бойынша жиынтық', gotAll, maxAll, doneN ? rating(p) : 'Тапсырмаларды орында', 'total')}</div>
+      ${doneN < t.tasks.length ? `<p class="muted res-note">Әлі тексерілмеген тапсырмалар: ${t.tasks.map((x, k) => scores[x.id] == null ? `<a href="#task-${k + 1}">${k + 1}</a>` : '').filter(Boolean).join(', ')}</p>` : ''}
+      <label class="box reflect-box">✍️ Кері байланыс. Бүгін мен үйрендім:
+        <textarea id="topic-reflect" rows="4" placeholder="Осы тараудан үйренген басты физикалық заңдылықтарыңды жаз..."></textarea></label>
+      <div class="step-nav">
+        <a class="btn btn-ghost" href="#${t.tasks.length ? 'task-' + t.tasks.length : 'overview'}">← Артқа</a>
+        ${next ? `<a class="btn btn-primary" href="topic.html?t=${next.id}">Келесі бөлім: ${esc(next.title)} →</a>` : '<a class="btn btn-primary" href="index.html">Барлық бөлімдер</a>'}
+      </div>`;
+  }
 
-      ${theory.length ? `
-      <div class="stage"><span class="b">2 кезең</span> Теория</div>
-      <div class="theory">${theory.map((s, k) => `
-        <details class="box" id="sec-${k}" ${k === 0 ? 'open' : ''}>
-          <summary>${esc(s.title)}</summary>
-          <div class="md">${md(s.theory)}</div>
-        </details>`).join('')}</div>` : ''}
+  function render() {
+    const v = view();
+    renderSide();
+    if (v === 'overview') content.innerHTML = overviewHTML();
+    else if (v === 'result') {
+      content.innerHTML = resultHTML();
+      const ta = document.getElementById('topic-reflect'), key = 'f9-reflect-' + t.id;
+      ta.value = store.get(key, '');
+      ta.oninput = () => store.set(key, ta.value);
+    } else {
+      const x = t.tasks[v - 1];
+      content.innerHTML = `<div id="tasks">${taskHTML(x, v, t)}</div>${navBtns(v > 1 ? 'task-' + (v - 1) : 'overview', v < t.tasks.length ? 'task-' + (v + 1) : 'result')}`;
+      bindTasks(document.getElementById('tasks'), [x]);
+    }
+    window.scrollTo(0, 0);
+  }
 
-      <div class="stage"><span class="b">${theory.length ? 3 : 2} кезең</span> Тапсырмалар</div>
-      <div id="tasks">${t.tasks.map((x, k) => taskHTML(x, k + 1)).join('') || '<div class="empty">Тапсырмалар әлі қосылмаған.</div>'}</div>
-
-      ${t.formulas.length ? `
-      <div class="stage"><span class="b">${theory.length ? 4 : 3} кезең</span> Негізгі формулалар</div>
-      <div class="formulas">${t.formulas.map(([f, d]) => `<div class="formula"><b>${esc(f)}</b><span>${esc(d)}</span></div>`).join('')}</div>` : ''}
-
-      <div class="pager">
-        ${prev ? `<a href="topic.html?t=${prev.id}">← ${esc(prev.title)}</a>` : '<span></span>'}
-        ${next ? `<a href="topic.html?t=${next.id}">${esc(next.title)} →</a>` : ''}
-      </div>
-    </div>
-
-    <aside class="aside">
-      <div class="ai-card">
-        <h3>🤖 ЖИ-мен зерттеу</h3>
-        <ul>${t.ai.map(a => `<li>${esc(a)}</li>`).join('')}</ul>
-        <div class="warn">ЖИ қателесуі мүмкін — әр жауапты формуламен немесе оқулықпен тексеріңіз.</div>
-      </div>
-      <div class="side-card">
-        <h3>📚 Бөлім тақырыптары</h3>
-        <ol>${t.sections.map(s => { const k = theory.indexOf(s); return `<li>${k >= 0 ? `<a href="#sec-${k}" onclick="document.getElementById('sec-${k}').open = true">${esc(s.title)}</a>` : esc(s.title)}</li>`; }).join('')}</ol>
-      </div>
-      <div class="side-card teacher-card teacher-only">
-        <h3>👩‍🏫 Мұғалімге кеңес</h3>
-        <p style="margin:0;font-size:14px">${esc(t.teacher)}</p>
-      </div>
-    </aside>`;
-  bindTasks(document.getElementById('tasks'), t.tasks);
+  window.addEventListener('hashchange', render);
+  document.addEventListener('task-scored', renderSide);
+  render();
 }
 
 // ---------- Тапсырмалар жинағы ----------

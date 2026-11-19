@@ -318,3 +318,53 @@ th { color: var(--navy); }
   .match, .calc { grid-template-columns: 1fr; }
   .tf li { grid-template-columns: 1fr; }
 }
+
+/* ---------- Тақырып беті: қадамдық навигация және қорытынды ---------- */
+.main.single { display: block; max-width: 980px; width: 100%; margin: 0 auto; }
+.main.single > * + * { margin-top: 0; }
+.steps-nav a::before { content: none !important; display: none !important; }
+.side .side-title { font-family: 'Montserrat'; font-weight: 800; font-size: 15px; padding: 4px 8px 14px; line-height: 1.35; }
+.steps-nav { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.steps-nav a { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; text-decoration: none; font-size: 14.5px; opacity: .8; }
+.steps-nav a:hover { background: rgba(255,255,255,.08); opacity: 1; }
+.steps-nav a.active { background: #2fb36b; opacity: 1; font-weight: 700; }
+.steps-nav .ic { width: 20px; text-align: center; font-size: 16px; }
+.steps-nav .st { margin-left: auto; font-size: 12px; font-weight: 700; background: rgba(255,255,255,.15); padding: 2px 7px; border-radius: 10px; }
+.steps-nav .st.ok { background: #2fb36b; }
+.steps-nav a.active .st.ok { background: rgba(255,255,255,.25); }
+.step-nav { display: flex; justify-content: space-between; gap: 12px; margin-top: 20px; }
+.step-nav .btn { border: 2px solid transparent; }
+.step-nav .btn-primary { background: #2fb36b; }
+.step-nav .btn-primary:hover { background: #27985a; }
+.ov-block { margin-bottom: 14px; }
+.ov-block h3 { margin: 0 0 8px; color: var(--navy); font-size: 17px; }
+.ov-block p { margin: 0; }
+.ov-block ul { margin: 0; padding-left: 20px; }
+.main.single .ai-card, .main.single .teacher-card { margin-bottom: 14px; }
+.res-head { text-align: center; margin-bottom: 20px; }
+.res-icon { width: 64px; height: 64px; margin: 0 auto 10px; border-radius: 18px; background: #d6f5e3; display: grid; place-items: center; font-size: 30px; }
+.res-head h1 { text-transform: none; }
+.res-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
+.res-card { border-radius: 16px; padding: 18px 14px; text-align: center; border: 1.5px solid var(--line); display: grid; gap: 4px; }
+.res-card .rc-title { font-weight: 700; font-size: 14px; }
+.res-card .rc-score { font: 800 32px/1.15 'Montserrat', sans-serif; }
+.res-card .rc-pct { font-size: 14px; }
+.res-card .rc-extra { font-size: 13px; }
+.res-card.c1 { background: #eef4fd; border-color: #b9cff0; color: #1f4f8f; }
+.res-card.c2 { background: #e8f8f2; border-color: #a9e2cb; color: #12614a; }
+.res-card.c3 { background: #f1f0fd; border-color: #c9c5f2; color: #3d3796; }
+.res-card.total { background: #0f172a; border-color: #0f172a; color: #fff; }
+.res-card.total .rc-title { color: #f6c453; }
+.res-card.total .rc-extra { color: #6ee7a8; font-weight: 700; }
+.res-card .rc-score { color: inherit; }
+.res-card.c1 .rc-score, .res-card.c2 .rc-score, .res-card.c3 .rc-score { color: var(--text); }
+.res-note { text-align: center; margin: 12px 0 0; }
+.res-note a { color: var(--teal); font-weight: 700; }
+.reflect-box { display: grid; gap: 10px; margin-top: 20px; font-weight: 700; }
+.reflect-box textarea { width: 100%; border: 1.5px solid var(--line); border-radius: 12px; padding: 12px; font: inherit; font-weight: 400; resize: vertical; background: #fff; color: var(--text); }
+@media (max-width: 860px) {
+  .steps-nav { display: flex; overflow-x: auto; gap: 6px; scrollbar-width: none; }
+  .steps-nav a { white-space: nowrap; background: rgba(255,255,255,.06); }
+  .side .side-title { padding-bottom: 8px; }
+  .step-nav .btn { flex: 1; justify-content: center; }
+}
